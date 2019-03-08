@@ -24,6 +24,9 @@
 * USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *****************************************************************************/
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include "app_lcl.h"
@@ -130,28 +133,18 @@ static int hmac_totp(const char *key,
     int len = 0;
     unsigned char buff[MAX_LEN];
     HMAC_CTX *ctx;
-
-#if OPENSSL_VERSION_NUMBER <= 0x10100000L
     HMAC_CTX static_ctx;
 
     ctx = &static_ctx;
     HMAC_CTX_init(ctx);
-#else
-    ctx = HMAC_CTX_new();
-#endif
 
-    HMAC_CTX_set_flags(ctx, EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
     if (!HMAC_Init_ex(ctx, key, key_len, md, NULL)) goto end;
     if (!HMAC_Update(ctx, msg, T_LEN)) goto end;
     if (!HMAC_Final(ctx, buff, (unsigned int *)&len)) goto end;
     memcpy_s(hash, hash_max, buff, len);
 
 end:
-#if OPENSSL_VERSION_NUMBER <= 0x10100000L
     HMAC_CTX_cleanup(ctx);
-#else
-    if (ctx) HMAC_CTX_free(ctx);
-#endif
 
     return len;
 }
