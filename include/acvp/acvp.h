@@ -199,12 +199,6 @@ typedef enum acvp_prereq_mode_t {
     ACVP_PREREQ_TDES
 } ACVP_PREREQ_ALG;
 
-#define ACVP_KDF135_SNMP_ENGID_MAX_BYTES 32
-#define ACVP_KDF135_SNMP_ENGID_MAX_STR 64
-#define ACVP_KDF135_SNMP_SKEY_MAX 64
-#define ACVP_KDF135_TPM_SKEY_MAX 32
-#define ACVP_KDF135_SNMP_PASSWORD_MAX 8192
-
 /*!
  * @enum ACVP_HASH_ALG
  * @brief Represents the general hash algorithms.
@@ -779,7 +773,7 @@ typedef struct acvp_kdf135_snmp_tc_t {
     ACVP_CIPHER cipher;
     unsigned int tc_id;    /* Test case id */
     unsigned char *engine_id;
-    char *engine_id_str;
+    unsigned int engine_id_len;
     const char *password;
     unsigned int p_len;
     unsigned char *s_key;
@@ -2614,6 +2608,17 @@ ACVP_RESULT acvp_set_vendor_info(ACVP_CTX *ctx,
  */
 ACVP_RESULT acvp_set_json_filename(ACVP_CTX *ctx, const char *json_filename);
 
+
+/*! @brief acvp_load_kat_filename loads and processes JSON kat vector file
+ *  This option will not communicate with the server at all.
+ *
+ * @param ctx Pointer to ACVP_CTX that was previously created by
+        calling acvp_create_test_session.
+ * @param kat_filename Name of the file that contains the JSON
+ *      kat vectors
+ * @return ACVP_RESULT
+ */
+ACVP_RESULT acvp_load_kat_filename(ACVP_CTX *ctx, const char *kat_filename);
 
 /*! @brief acvp_set_module_info() specifies the crypto module attributes
     for the test session.
