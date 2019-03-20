@@ -1237,14 +1237,15 @@ ACVP_RESULT acvp_register(ACVP_CTX *ctx) {
     char *vendors = NULL, *modules = NULL, *oes = NULL, *dep = NULL;
     ACVP_DEPENDENCY_LIST *current_dep;
 #endif
-    char *login = NULL, *reg = NULL;
-    int login_len = 0, reg_len = 0;
+    char *reg = NULL;
+    int reg_len = 0;
     JSON_Value *tmp_json_from_file;
 
     if (!ctx) {
         return ACVP_NO_CTX;
     }
 
+#if 0
     /*
      * Construct the login message
      */
@@ -1277,6 +1278,7 @@ ACVP_RESULT acvp_register(ACVP_CTX *ctx) {
             goto end;
         }
     }
+#endif
 
     if (ctx->use_json != 1) {
 #if 0 // TODO these endpoints are NOT availble via API yet
@@ -1391,7 +1393,6 @@ ACVP_RESULT acvp_register(ACVP_CTX *ctx) {
     }
 
 end:
-    if (login) free(login);
     if (reg) json_free_serialized_string(reg);
 #if 0 // TODO these endpoints are NOT availble via API yet
     if (vendors) json_free_serialized_string(vendors);

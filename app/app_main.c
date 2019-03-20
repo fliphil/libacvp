@@ -209,6 +209,7 @@ int main(int argc, char **argv) {
         goto end;
     }
 
+#if 0
     /*
      * Next we provide the CA certs to be used by libacvp
      * to verify the ACVP TLS certificate.
@@ -238,6 +239,7 @@ int main(int argc, char **argv) {
         printf("Failed to set Two-factor authentication callback\n");
         goto end;
     }
+#endif
 
     if (cfg.sample) {
         acvp_mark_as_sample(ctx);
