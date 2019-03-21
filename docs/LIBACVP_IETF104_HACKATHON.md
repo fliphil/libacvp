@@ -106,4 +106,4 @@ export ACV_API_CONTEXT="acvp/"
 
 Now to simply kick off the application, execute the binary!
 
-`./app/acvp`
+`./app/acvp_app`
