@@ -7,7 +7,7 @@ This guide will go over how use Libacvp to test BoringSSL as the cryptography pr
 Inside the fliphil/libacvp repo on branch aes-gcm-siv you will find a Dockerfile at the root directory. A Docker image can be built using this file, and then the developer will mount the libacvp/ directory as a volume. Mounting the libacvp/ directory will ensure that any code changes made within the container do not disappear when the container is terminated. The Docker container will have Vim and Emacs installed by default… of course the developer can add packages to the container as needed within the Dockerfile!
 
 ```
-git clone https://github.com/cisco/libacvp.git
+git clone https://github.com/fliphil/libacvp.git
 cd libacvp && git checkout aes-gcm-siv
 docker build -t libacvp_w_boringssl .
 docker run -v $(pwd):/home/docker/libacvp --user $(id -u) -it libacvp_w_boringssl
