@@ -83,6 +83,7 @@ static ACVP_RESULT acvp_get_result_test_session(ACVP_CTX *ctx, char *session_url
  */
 ACVP_ALG_HANDLER alg_tbl[ACVP_ALG_MAX] = {
     { ACVP_AES_GCM,           &acvp_aes_kat_handler,          ACVP_ALG_AES_GCM,           NULL                    },
+    { ACVP_AES_GCM_SIV,       &acvp_aes_kat_handler,          ACVP_ALG_AES_GCM_SIV,       NULL                    },
     { ACVP_AES_CCM,           &acvp_aes_kat_handler,          ACVP_ALG_AES_CCM,           NULL                    },
     { ACVP_AES_ECB,           &acvp_aes_kat_handler,          ACVP_ALG_AES_ECB,           NULL                    },
     { ACVP_AES_CBC,           &acvp_aes_kat_handler,          ACVP_ALG_AES_CBC,           NULL                    },

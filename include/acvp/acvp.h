@@ -107,6 +107,7 @@ typedef enum acvp_result ACVP_RESULT;
 typedef enum acvp_cipher {
     ACVP_CIPHER_START = 0,
     ACVP_AES_GCM,
+    ACVP_AES_GCM_SIV,
     ACVP_AES_CCM,
     ACVP_AES_ECB,
     ACVP_AES_CBC,
@@ -634,6 +635,14 @@ typedef struct acvp_sym_cipher_tc_t {
     unsigned int iv_len;
     unsigned int ct_len;
     unsigned int tag_len;
+    unsigned int pt_max; /**< The max size (in bytes) of provided
+                              \ref ACVP_SYM_CIPHER_TC.pt buffer */
+    unsigned int ct_max; /**< The max size (in bytes) of provided
+                              \ref ACVP_SYM_CIPHER_TC.ct buffer */
+    unsigned int iv_max; /**< The max size (in bytes) of provided
+                              \ref ACVP_SYM_CIPHER_TC.iv buffer */
+    unsigned int tag_max; /**< The max size (in bytes) of provided
+                               \ref ACVP_SYM_CIPHER_TC.tag buffer */
     unsigned int mct_index;  /* used to identify init vs. update */
     unsigned int incr_ctr;
     unsigned int ovrflw_ctr;

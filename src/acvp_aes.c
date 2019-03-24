@@ -329,7 +329,7 @@ static ACVP_RESULT acvp_aes_mct_tc(ACVP_CTX *ctx,
                     return rv;
                 }
             }
-            json_object_set_string(r_tobj, "ct", tmp);
+           json_object_set_string(r_tobj, "ct", tmp);
 
             if (stc->cipher == ACVP_AES_CFB8) {
                 /* ct = CT[j-15] || CT[j-14] || ... || CT[j] */
@@ -748,8 +748,10 @@ ACVP_RESULT acvp_aes_kat_handler(ACVP_CTX *ctx, JSON_Object *obj) {
             (alg_id != ACVP_AES_KWP)) {
             ivlen = 128;
         }
-        if (alg_id == ACVP_AES_GCM || alg_id == ACVP_AES_CCM) {
-            ivlen = (unsigned int)json_object_get_number(groupobj, "ivLen");
+        if (alg_id == ACVP_AES_GCM ||
+            alg_id == ACVP_AES_GCM_SIV ||
+            alg_id == ACVP_AES_CCM) {
+            ivlen = 96;
             if (!ivlen) {
                 ACVP_LOG_ERR("Server JSON missing 'ivlen'");
                 rv = ACVP_MISSING_ARG;
@@ -791,7 +793,7 @@ ACVP_RESULT acvp_aes_kat_handler(ACVP_CTX *ctx, JSON_Object *obj) {
                         goto err;
                     }
                 }
-            } else {
+            } else if (alg_id == ACVP_AES_CCM) {
                 if (ivlen >= ACVP_AES_CCM_IV_BIT_MIN &&
                     ivlen <= ACVP_AES_CCM_IV_BIT_MAX) {
                     if (ivlen % 8 != 0) {
@@ -801,6 +803,12 @@ ACVP_RESULT acvp_aes_kat_handler(ACVP_CTX *ctx, JSON_Object *obj) {
                         goto err;
                     }
                 } else {
+                    ACVP_LOG_ERR("Server JSON invalid 'ivlen', (%u)", ivlen);
+                    rv = ACVP_INVALID_ARG;
+                    goto err;
+                }
+            } else if (alg_id == ACVP_AES_GCM_SIV) {
+                if (ivlen != 96) {
                     ACVP_LOG_ERR("Server JSON invalid 'ivlen', (%u)", ivlen);
                     rv = ACVP_INVALID_ARG;
                     goto err;
@@ -815,13 +823,15 @@ ACVP_RESULT acvp_aes_kat_handler(ACVP_CTX *ctx, JSON_Object *obj) {
                 goto err;
             }
 
-            taglen = (unsigned int)json_object_get_number(groupobj, "tagLen");
+            taglen = 128;
+#if 0
             if (!(taglen >= ACVP_SYM_TAG_BIT_MIN &&
                   taglen <= ACVP_SYM_TAG_BIT_MAX)) {
                 ACVP_LOG_ERR("Server JSON invalid 'taglen', (%u)", taglen);
                 rv = ACVP_INVALID_ARG;
                 goto err;
             }
+#endif
         }
 
         ptlen = (unsigned int)json_object_get_number(groupobj, "payloadLen");
@@ -839,7 +849,6 @@ ACVP_RESULT acvp_aes_kat_handler(ACVP_CTX *ctx, JSON_Object *obj) {
         ACVP_LOG_INFO("         ivlen: %d", ivlen);
         ACVP_LOG_INFO("         ptlen: %d", ptlen);
         ACVP_LOG_INFO("        aadlen: %d", aadlen);
-        ACVP_LOG_INFO("        taglen: %d", taglen);
         ACVP_LOG_INFO("      testtype: %s", test_type_str);
         ACVP_LOG_INFO("      incr_ctr: %d", incr_ctr);
         ACVP_LOG_INFO("    ovrflw_ctr: %d", ovrflw_ctr);
@@ -964,7 +973,9 @@ ACVP_RESULT acvp_aes_kat_handler(ACVP_CTX *ctx, JSON_Object *obj) {
                 }
             }
 
-            if (alg_id == ACVP_AES_GCM || alg_id == ACVP_AES_CCM) {
+            if (alg_id == ACVP_AES_GCM ||
+                alg_id == ACVP_AES_GCM_SIV ||
+                alg_id == ACVP_AES_CCM) {
                 aad = json_object_get_string(testobj, "aad");
                 if (!aad) {
                     ACVP_LOG_ERR("Server JSON missing 'aad'");
@@ -1026,7 +1037,7 @@ ACVP_RESULT acvp_aes_kat_handler(ACVP_CTX *ctx, JSON_Object *obj) {
                 /* Process the current AES KAT test vector... */
                 int t_rv = (cap->crypto_handler)(&tc);
                 if (t_rv) {
-                    if (alg_id != ACVP_AES_KW && alg_id != ACVP_AES_GCM &&
+                    if (alg_id != ACVP_AES_KW && alg_id != ACVP_AES_GCM_SIV &&
                         alg_id != ACVP_AES_CCM && alg_id != ACVP_AES_KWP) {
                         ACVP_LOG_ERR("ERROR: crypto module failed the operation");
                         acvp_aes_release_tc(&stc);
@@ -1120,6 +1131,13 @@ static ACVP_RESULT acvp_aes_output_tc(ACVP_CTX *ctx,
             ACVP_LOG_ERR("hex conversion failure (ct)");
             goto err;
         }
+
+        rv = acvp_bin_to_hexstr(stc->tag, stc->tag_len, tmp+(stc->ct_len*2), ACVP_SYM_CT_MAX);
+        if (rv != ACVP_SUCCESS) {
+             ACVP_LOG_ERR("hex conversion failure (ct)");
+             free(tmp);
+             return rv;
+        }
         json_object_set_string(tc_rsp, "ct", tmp);
 
         /*
@@ -1135,7 +1153,7 @@ static ACVP_RESULT acvp_aes_output_tc(ACVP_CTX *ctx,
             json_object_set_string(tc_rsp, "tag", tmp);
         }
     } else {
-        if (stc->cipher == ACVP_AES_GCM || stc->cipher == ACVP_AES_CCM ||
+        if (stc->cipher == ACVP_AES_GCM_SIV || stc->cipher == ACVP_AES_CCM ||
             stc->cipher == ACVP_AES_KW || stc->cipher == ACVP_AES_KWP) {
             if (opt_rv != 0) {
                 json_object_set_boolean(tc_rsp, "testPassed", 0);
@@ -1307,6 +1325,12 @@ static ACVP_RESULT acvp_aes_init_tc(ACVP_CTX *ctx,
     stc->aad_len = aad_len / 8;
     if (!stc->pt_len) stc->pt_len = pt_len / 8;
     if (!stc->ct_len) stc->ct_len = pt_len / 8;
+
+    /* Record the buffer sizes */
+    stc->pt_max = ACVP_SYM_PT_BYTE_MAX;
+    stc->ct_max = ACVP_SYM_CT_BYTE_MAX;
+    stc->iv_max = ACVP_SYM_IV_BYTE_MAX;
+    stc->tag_max = ACVP_SYM_TAG_BYTE_MAX;
 
     stc->cipher = alg_id;
     stc->direction = dir;
