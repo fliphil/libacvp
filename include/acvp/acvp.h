@@ -2,31 +2,14 @@
  *  This is the public header file to be included by applications
  *  using libacvp.
  */
-/*****************************************************************************
-* Copyright (c) 2016-2017, Cisco Systems, Inc.
-* All rights reserved.
-
-* Redistribution and use in source and binary forms, with or without modification,
-* are permitted provided that the following conditions are met:
-*
-* 1. Redistributions of source code must retain the above copyright notice,
-*    this list of conditions and the following disclaimer.
-*
-* 2. Redistributions in binary form must reproduce the above copyright notice,
-*    this list of conditions and the following disclaimer in the documentation
-*    and/or other materials provided with the distribution.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
-* USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*****************************************************************************/
+/*
+ * Copyright (c) 2019, Cisco Systems, Inc.
+ *
+ * Licensed under the Apache License 2.0 (the "License").  You may not use
+ * this file except in compliance with the License.  You can obtain a copy
+ * in the file LICENSE in the source distribution or at
+ * https://github.com/cisco/libacvp/LICENSE
+ */
 
 #ifndef acvp_h
 #define acvp_h
@@ -51,23 +34,6 @@ typedef enum acvp_log_lvl {
     ACVP_LOG_LVL_INFO,
     ACVP_LOG_LVL_VERBOSE,
 } ACVP_LOG_LVL;
-
-/*! @struct ACVP_KV_LIST
- * @brief This struct is a list of key/value pairs
- * to be added to flexible JSON objects during registration
- *
- * For example, dependencies can have different key/value
- * pairs depending on their type, so if the attributes are
- * added to this list, then the list can get translated into
- * proper JSON during dependency registration.
- */
-typedef struct acvp_kv_list_t {
-    char *key;
-    char *value;
-    struct acvp_kv_list_t *next;
-} ACVP_KV_LIST;
-
-void acvp_free_kv_list(ACVP_KV_LIST *kv_list);
 
 /*! @struct ACVP_CTX
  *  @brief This opaque structure is used to maintain the state of a test session
@@ -137,6 +103,12 @@ typedef enum acvp_cipher {
     ACVP_HASH_SHA256,
     ACVP_HASH_SHA384,
     ACVP_HASH_SHA512,
+    ACVP_HASH_SHA3_224,
+    ACVP_HASH_SHA3_256,
+    ACVP_HASH_SHA3_384,
+    ACVP_HASH_SHA3_512,
+    ACVP_HASH_SHAKE_128,
+    ACVP_HASH_SHAKE_256,
     ACVP_HASHDRBG,
     ACVP_HMACDRBG,
     ACVP_CTRDRBG,
@@ -354,8 +326,11 @@ typedef enum acvp_kdf135_snmp_param {
 #define ACVP_STR_SHA2_512_256   "SHA2-512/256"
 #define ACVP_STR_SHA_MAX        12
 typedef enum acvp_hash_param {
-    ACVP_HASH_IN_BIT = 0,
-    ACVP_HASH_IN_EMPTY
+    ACVP_HASH_IN_BIT = 1,
+    ACVP_HASH_IN_EMPTY,
+    ACVP_HASH_OUT_BIT, /**< Used for ACVP_HASH_SHAKE_128, ACVP_HASH_SHAKE_256 */
+    ACVP_HASH_OUT_LENGTH, /**< Used for ACVP_HASH_SHAKE_128, ACVP_HASH_SHAKE_256 */
+    ACVP_HASH_MESSAGE_LEN
 } ACVP_HASH_PARM;
 
 /*
@@ -553,7 +528,8 @@ typedef enum acvp_sym_cipher_testtype {
 typedef enum acvp_hash_testtype {
     ACVP_HASH_TEST_TYPE_NONE = 0,
     ACVP_HASH_TEST_TYPE_AFT,
-    ACVP_HASH_TEST_TYPE_MCT
+    ACVP_HASH_TEST_TYPE_MCT,
+    ACVP_HASH_TEST_TYPE_VOT
 } ACVP_HASH_TESTTYPE;
 
 /*! @struct ACVP_HMAC_PARM */
@@ -669,15 +645,28 @@ typedef struct acvp_entropy_tc_t {
  */
 typedef struct acvp_hash_tc_t {
     ACVP_CIPHER cipher;
-    unsigned int tc_id;           /* Test case id */
-    ACVP_HASH_TESTTYPE test_type; /* KAT or MCT */
-    unsigned char *msg;
-    unsigned char *m1;
-    unsigned char *m2;
-    unsigned char *m3;
-    unsigned int msg_len;
-    unsigned char *md; /* The resulting digest calculated for the test case */
-    unsigned int md_len;
+    unsigned int tc_id;           /**< Test case id */
+    ACVP_HASH_TESTTYPE test_type; /**< KAT or MCT or VOT */
+    unsigned char *msg; /**< Message input */
+    unsigned char *m1; /**< Mesage input #1
+                            Provided when \ref ACVP_HASH_TC.test_type is MCT */
+    unsigned char *m2; /**< Mesage input #2
+                            Provided when \ref ACVP_HASH_TC.test_type is MCT */
+    unsigned char *m3; /**< Mesage input #3
+                            Provided when \ref ACVP_HASH_TC.test_type is MCT */
+    unsigned int msg_len; /**< Length (in bytes) of...
+                               \ref ACVP_HASH_TC.msg , \ref ACVP_HASH_TC.m1 ,
+                               \ref ACVP_HASH_TC.m2 , \ref ACVP_HASH_TC.m3 */
+    unsigned int xof_len; /**< XOF (extendable output format) length
+                               The expected length (in bytes) of \ref ACVP_HASH_TC.md
+                               Only provided when \ref ACVP_HASH_TC.test_type is VOT */
+    unsigned int xof_bit_len; /**< XOF (extendable output format) length
+                                   The expected length (in bits) of \ref ACVP_HASH_TC.md
+                                   Only provided when \ref ACVP_HASH_TC.test_type is VOT */
+    unsigned char *md; /**< The resulting digest calculated for the test case.
+                            SUPPLIED BY USER */
+    unsigned int md_len; /**< The length (in bytes) of \ref ACVP_HASH_TC.md
+                              SUPPLIED BY USER */
 } ACVP_HASH_TC;
 
 /*!
@@ -1386,6 +1375,7 @@ enum acvp_result {
     ACVP_UNSUPPORTED_OP,
     ACVP_CLEANUP_FAIL,
     ACVP_KAT_DOWNLOAD_RETRY,
+    ACVP_OE_RETRY,
     ACVP_INVALID_ARG,
     ACVP_MISSING_ARG,
     ACVP_CRYPTO_MODULE_FAIL,
@@ -1518,6 +1508,13 @@ ACVP_RESULT acvp_cap_hash_set_parm(ACVP_CTX *ctx,
                                    ACVP_HASH_PARM param,
                                    int value);
 
+ACVP_RESULT acvp_cap_hash_set_domain(ACVP_CTX *ctx,
+                                     ACVP_CIPHER cipher,
+                                     ACVP_HASH_PARM parm,
+                                     int min,
+                                     int max,
+                                     int increment);
+
 /*! @brief acvp_enable_drbg_cap() allows an application to specify a
        hash capability to be tested by the ACVP server.
 
@@ -1567,29 +1564,6 @@ ACVP_RESULT acvp_cap_drbg_set_parm(ACVP_CTX *ctx,
                                    ACVP_DRBG_MODE mode,
                                    ACVP_DRBG_PARM param,
                                    int value);
-
-/*! @brief acvp_enable_drbg_prereq_cap() allows an application to specify
-        a prerequisite algorithm for a given DRBG during a test session
-        with the ACVP server.
-
-        This function should be called to enable a prerequisite for
-        a DRBG capability that will be tested by the server.
-
-   @param ctx Address of pointer to a previously allocated ACVP_CTX.
-   @param cipher ACVP_CIPHER enum value identifying the crypto capability.
-   @param mode ACVP_DRBG_MODE enum value specifying mode. An example would be
-        ACVP_DRBG_SHA_1
-   @param pre_req ACVP_PREREQ_ALG enum that the specified cipher/mode
-        depends on
-   @param value "same" or number
-
-   @return ACVP_RESULT
- */
-ACVP_RESULT acvp_cap_drbg_set_prereq(ACVP_CTX *ctx,
-                                     ACVP_CIPHER cipher,
-                                     ACVP_DRBG_MODE mode,
-                                     ACVP_PREREQ_ALG pre_req,
-                                     char *value);
 
 /*! @brief acvp_enable_drbg_length_cap() allows an application to register
         a DRBG capability length-based paramter.
@@ -2444,16 +2418,6 @@ ACVP_RESULT acvp_create_test_session(ACVP_CTX **ctx,
  */
 ACVP_RESULT acvp_free_test_session(ACVP_CTX *ctx);
 
-/*! @brief acvp_enable_debug_request() sets a flag in the acvp ctx that
-    asks the server to send debug messages
-
-    @param ctx Pointer to ACVP_CTX that was previously created by
-        calling acvp_create_test_session.
-
-    @return ACVP_RESULT
- */
-ACVP_RESULT acvp_enable_debug_request(ACVP_CTX *ctx);
-
 /*! @brief acvp_set_server() specifies the ACVP server and TCP port
        number to use when contacting the server.
 
@@ -2558,52 +2522,75 @@ ACVP_RESULT acvp_set_certkey(ACVP_CTX *ctx, char *cert_file, char *key_file);
  */
 ACVP_RESULT acvp_mark_as_sample(ACVP_CTX *ctx);
 
-/*! @brief acvp_register() registers the DUT with the ACVP server.
+/*! @brief acvp_mark_as_request_only() marks the registration as a request only.
 
-    This function is used to register the DUT with the server.
-    Registration allows the DUT to advertise it's capabilities to
-    the server.  The server will respond with a set of vector set
-    identifiers that the client will need to process.
+    This function sets a flag that will allow the client to retrieve
+    the vectors from the server and store them in a file for later use.
 
     @param ctx Pointer to ACVP_CTX that was previously created by
         calling acvp_create_test_session.
+    @param filename Name of the file to be used for the request vectors
 
-    @return ACVP_RESULT
  */
-ACVP_RESULT acvp_register(ACVP_CTX *ctx);
+ACVP_RESULT acvp_mark_as_request_only(ACVP_CTX *ctx, char *filename);
 
-/*! @brief acvp_process_tests() performs the ACVP testing procedures.
 
-    This function will commence the test session after the DUT has
-    been registered with the ACVP server.  This function should be
-    invoked after acvp_register() finishes.  When invoked, this function
-    will download the vector sets from the ACVP server, process the
-    vectors, and upload the results to the server.
-
-    @param ctx Pointer to ACVP_CTX that was previously created by
-        calling acvp_create_test_session.
-
-    @return ACVP_RESULT
+/*! @brief Performs the ACVP testing procedures.
+ *
+ * This function will do the following actions:
+ *   1. Verify the provided metadata if user has specified \p fips_validation.
+ *   2. Register a new testSession with the ACVP server with the capabilities attached to the \p ctx.
+ *   3. Communicate with the ACVP server to acquire the test vectors, calculate the results
+ *      and upload the results to the server.
+ *   4. Check the results of each vector associated with the testSession. The success or failure
+ *      information will be printed to stderr.
+ *   5. Request that the ACVP server perform a FIPS validation (if \p fips_validation == 1 and testSession is passed).
+ *
+ * @param ctx Pointer to ACVP_CTX that was previously created by
+ *            calling acvp_create_test_session.
+ *
+ * @return ACVP_RESULT
  */
-ACVP_RESULT acvp_process_tests(ACVP_CTX *ctx);
+ACVP_RESULT acvp_run(ACVP_CTX *ctx, int fips_validation);
 
-/*! @brief acvp_set_vendor_info() specifies the vendor attributes
-    for the test session.
+ACVP_RESULT acvp_oe_ingest_metadata(ACVP_CTX *ctx, const char *metadata_file);
 
-    @param ctx Pointer to ACVP_CTX that was previously created by
-        calling acvp_create_test_session.
-    @param vendor_name Name of the vendor that owns the crypto module.
-    @param vendor_url The Vendor's URL.
-    @param contact_name Name of contact at Vendor.
-    @param contact_email Email of vendor contact.
+ACVP_RESULT acvp_oe_set_fips_validation_metadata(ACVP_CTX *ctx,
+                                                 unsigned int module_id,
+                                                 unsigned int oe_id);
 
-    @return ACVP_RESULT
- */
-ACVP_RESULT acvp_set_vendor_info(ACVP_CTX *ctx,
-                                 const char *vendor_name,
-                                 const char *vendor_url,
-                                 const char *contact_name,
-                                 const char *contact_email);
+ACVP_RESULT acvp_oe_module_new(ACVP_CTX *ctx,
+                               unsigned int id,
+                               unsigned int vendor_id,
+                               const char *name);
+
+ACVP_RESULT acvp_oe_module_set_type_version_desc(ACVP_CTX *ctx,
+                                                 unsigned int id,
+                                                 const char *type,
+                                                 const char *version,
+                                                 const char *description);
+
+ACVP_RESULT acvp_oe_dependency_new(ACVP_CTX *ctx, unsigned int id);
+
+ACVP_RESULT acvp_oe_dependency_set_type(ACVP_CTX *ctx,
+                                        unsigned int dependency_id,
+                                        const char *value);
+
+ACVP_RESULT acvp_oe_dependency_set_name(ACVP_CTX *ctx,
+                                        unsigned int dependency_id,
+                                        const char *value);
+
+ACVP_RESULT acvp_oe_dependency_set_description(ACVP_CTX *ctx,
+                                               unsigned int dependency_id,
+                                               const char *value);
+
+ACVP_RESULT acvp_oe_oe_new(ACVP_CTX *ctx,
+                           unsigned int id,
+                           const char *oe_name);
+
+ACVP_RESULT acvp_oe_oe_set_dependency(ACVP_CTX *ctx,
+                                      unsigned int oe_id,
+                                      unsigned int dependency_id);
 
 /*! @brief acvp_set_json_filename specifies JSON registration file
  *  to be used during registration. This allows the app to skip the
@@ -2617,7 +2604,6 @@ ACVP_RESULT acvp_set_vendor_info(ACVP_CTX *ctx,
  */
 ACVP_RESULT acvp_set_json_filename(ACVP_CTX *ctx, const char *json_filename);
 
-
 /*! @brief acvp_load_kat_filename loads and processes JSON kat vector file
  *  This option will not communicate with the server at all.
  *
@@ -2628,44 +2614,8 @@ ACVP_RESULT acvp_set_json_filename(ACVP_CTX *ctx, const char *json_filename);
  * @return ACVP_RESULT
  */
 ACVP_RESULT acvp_load_kat_filename(ACVP_CTX *ctx, const char *kat_filename);
-
-/*! @brief acvp_set_module_info() specifies the crypto module attributes
-    for the test session.
-
-    @param ctx Pointer to ACVP_CTX that was previously created by
-        calling acvp_create_test_session.
-    @param module_name Name of the crypto module under test.
-    @param module_type The crypto module type: software, hardware, or hybrid.
-    @param module_version The version# of the crypto module under test.
-    @param module_description A brief description of the crypto module under test.
-
-    @return ACVP_RESULT
- */
-ACVP_RESULT acvp_set_module_info(ACVP_CTX *ctx,
-                                 const char *module_name,
-                                 const char *module_type,
-                                 const char *module_version,
-                                 const char *module_description);
-
-/*! @brief acvp_add_oe_dependency() adds a list of key/value pairs for
- * a flexible json OE dependency
- * @param ctx
- * @param oe_name
- * @param key_val_list
- * @return ACVP_RESULT
- */
-ACVP_RESULT acvp_add_oe_dependency(ACVP_CTX *ctx,
-                                   const char *oe_name,
-                                   ACVP_KV_LIST *key_val_list);
-
-/*! @brief acvp_check_test_results() allows the application to fetch vector
-        set results from the server during a test session.
-
-   @param ctx Address of pointer to a previously allocated ACVP_CTX.
-
-   @return ACVP_RESULT
- */
-ACVP_RESULT acvp_check_test_results(ACVP_CTX *ctx);
+ACVP_RESULT acvp_upload_vectors_from_file(ACVP_CTX *ctx, const char *rsp_filename);
+ACVP_RESULT acvp_run_vectors_from_file(ACVP_CTX *ctx, const char *req_filename, const char *rsp_filename);
 
 /*! @brief acvp_set_2fa_callback() sets a callback function which
     will create or obtain a TOTP password for the second part of

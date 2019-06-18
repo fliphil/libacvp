@@ -1,28 +1,10 @@
 """
+* Copyright (c) 2019, Cisco Systems, Inc.
 *
-* Copyright (c) 2018, Cisco Systems, Inc.
-* All rights reserved.
-*
-* Redistribution and use in source and binary forms, with or without modification,
-* are permitted provided that the following conditions are met:
-*
-* 1. Redistributions of source code must retain the above copyright notice,
-*    this list of conditions and the following disclaimer.
-*
-* 2. Redistributions in binary form must reproduce the above copyright notice,
-*    this list of conditions and the following disclaimer in the documentation
-*    and/or other materials provided with the distribution.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
-* USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+* Licensed under the Apache License 2.0 (the "License").  You may not use
+* this file except in compliance with the License.  You can obtain a copy
+* in the file LICENSE in the source distribution or at
+* https://github.com/cisco/libacvp/LICENSE
 *
 """
 import os
@@ -123,11 +105,11 @@ def ref_testgroup_and_test(j_list, group_type=ENCRYPT):
 
 
 def convert_to_ctr(s):
-    if s[1]["algorithm"] == "TDES-CTR":
+    if s[1]["algorithm"] == "ACVP-TDES-CTR":
         # Already CTR mode
         return
 
-    s[1]["algorithm"] = "TDES-CTR"
+    s[1]["algorithm"] = "ACVP-TDES-CTR"
 
     tg, t = ref_testgroup_and_test(s, ENCRYPT)
     tg["incrementalCounter"] = True
@@ -316,9 +298,9 @@ def gen(j=None):
     ##
     s = copy.deepcopy(j)
     tg, t = ref_testgroup_and_test(s, ENCRYPT)
-    if s[1]["algorithm"] == "TDES-ECB":
+    if s[1]["algorithm"] == "ACVP-TDES-ECB":
         # ECB doesn't have iv
-        s[1]["algorithm"] = "TDES-CBC"
+        s[1]["algorithm"] = "ACVP-TDES-CBC"
     else:
         del t["iv"]
 
@@ -331,9 +313,9 @@ def gen(j=None):
     s = copy.deepcopy(j)
     tg, t = ref_testgroup_and_test(s, ENCRYPT)
 
-    if s[1]["algorithm"] == "TDES-ECB":
+    if s[1]["algorithm"] == "ACVP-TDES-ECB":
         # ECB doesn't have iv
-        s[1]["algorithm"] = "TDES-CBC"
+        s[1]["algorithm"] = "ACVP-TDES-CBC"
 
     t["iv"] = "a" * 257
     with open(os.path.join(cur_dir, "des_17.json"), "w") as fp:
@@ -349,7 +331,7 @@ def gen(j=None):
         json.dump(s, fp, indent=2)
 
     ##
-    # The boolean for "incrementalCounter" is not a boolean for TDES-CTR
+    # The boolean for "incrementalCounter" is not a boolean for ACVP-TDES-CTR
     ##
     s = copy.deepcopy(j)
     convert_to_ctr(s)
@@ -361,7 +343,7 @@ def gen(j=None):
         json.dump(s, fp, indent=2)
 
     ##
-    # The boolean for "overflowCounter" is not a boolean for TDES-CTR
+    # The boolean for "overflowCounter" is not a boolean for ACVP-TDES-CTR
     ##
     s = copy.deepcopy(j)
     convert_to_ctr(s)

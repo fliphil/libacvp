@@ -1,29 +1,13 @@
 /** @file */
-/*****************************************************************************
-* Copyright (c) 2018, Cisco Systems, Inc.
-* All rights reserved.
+/*
+ * Copyright (c) 2019, Cisco Systems, Inc.
+ *
+ * Licensed under the Apache License 2.0 (the "License").  You may not use
+ * this file except in compliance with the License.  You can obtain a copy
+ * in the file LICENSE in the source distribution or at
+ * https://github.com/cisco/libacvp/LICENSE
+ */
 
-* Redistribution and use in source and binary forms, with or without modification,
-* are permitted provided that the following conditions are met:
-*
-* 1. Redistributions of source code must retain the above copyright notice,
-*    this list of conditions and the following disclaimer.
-*
-* 2. Redistributions in binary form must reproduce the above copyright notice,
-*    this list of conditions and the following disclaimer in the documentation
-*    and/or other materials provided with the distribution.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
-* USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*****************************************************************************/
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -101,12 +85,63 @@ static ACVP_RESULT acvp_lookup_prereqVals(JSON_Object *cap_obj, ACVP_CAPS_LIST *
 }
 
 static ACVP_RESULT acvp_build_hash_register_cap(JSON_Object *cap_obj, ACVP_CAPS_LIST *cap_entry) {
-    json_object_set_string(cap_obj, "algorithm", acvp_lookup_cipher_name(cap_entry->cipher));
-    if (!cap_entry->cap.hash_cap) {
+    JSON_Array *msg_array = NULL;
+    JSON_Value *msg_val = NULL;
+    JSON_Object *msg_obj = NULL;
+    ACVP_HASH_CAP *hash_cap = cap_entry->cap.hash_cap;
+    const char *revision = NULL;
+
+    if (!hash_cap) {
         return ACVP_MISSING_ARG;
     }
-    json_object_set_boolean(cap_obj, "inBit", cap_entry->cap.hash_cap->in_bit);
-    json_object_set_boolean(cap_obj, "inEmpty", cap_entry->cap.hash_cap->in_empty);
+
+    json_object_set_string(cap_obj, "algorithm", acvp_lookup_cipher_name(cap_entry->cipher));
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
+
+    if (cap_entry->cipher == ACVP_HASH_SHA3_224 ||
+        cap_entry->cipher == ACVP_HASH_SHA3_256 ||
+        cap_entry->cipher == ACVP_HASH_SHA3_384 ||
+        cap_entry->cipher == ACVP_HASH_SHA3_512 ||
+        cap_entry->cipher == ACVP_HASH_SHAKE_128 ||
+        cap_entry->cipher == ACVP_HASH_SHAKE_256) {
+        json_object_set_boolean(cap_obj, "inBit", cap_entry->cap.hash_cap->in_bit);
+        json_object_set_boolean(cap_obj, "inEmpty", cap_entry->cap.hash_cap->in_empty);
+
+        if (cap_entry->cipher == ACVP_HASH_SHAKE_128 ||
+            cap_entry->cipher == ACVP_HASH_SHAKE_256) {
+            /* SHAKE specific capabilities */
+            JSON_Array *tmp_arr = NULL;
+            JSON_Value *tmp_val = NULL;
+            JSON_Object *tmp_obj = NULL;
+
+            json_object_set_boolean(cap_obj, "outBit", cap_entry->cap.hash_cap->out_bit);
+
+            json_object_set_value(cap_obj, "outputLength", json_value_init_array());
+            tmp_arr = json_object_get_array(cap_obj, "outputLength");
+            tmp_val = json_value_init_object();
+            tmp_obj = json_value_get_object(tmp_val);
+
+            json_object_set_number(tmp_obj, "min", cap_entry->cap.hash_cap->out_len.min);
+            json_object_set_number(tmp_obj, "max", cap_entry->cap.hash_cap->out_len.max);
+            json_object_set_number(tmp_obj, "increment", cap_entry->cap.hash_cap->out_len.increment);
+
+            json_array_append_value(tmp_arr, tmp_val);
+        }
+    } else {
+        json_object_set_value(cap_obj, "messageLength", json_value_init_array());
+        msg_array = json_object_get_array(cap_obj, "messageLength");
+
+        msg_val = json_value_init_object();
+        msg_obj = json_value_get_object(msg_val);
+
+        json_object_set_number(msg_obj, "min", hash_cap->msg_length.min);
+        json_object_set_number(msg_obj, "max", hash_cap->msg_length.max);
+        json_object_set_number(msg_obj, "increment", hash_cap->msg_length.increment);
+        json_array_append_value(msg_array, msg_val);
+    }
 
     return ACVP_SUCCESS;
 }
@@ -115,11 +150,17 @@ static ACVP_RESULT acvp_build_hmac_register_cap(JSON_Object *cap_obj, ACVP_CAPS_
     JSON_Array *temp_arr = NULL;
     ACVP_RESULT result;
     ACVP_HMAC_CAP *hmac_cap = cap_entry->cap.hmac_cap;
+    const char *revision = NULL;
 
     if (!cap_entry->cap.hmac_cap) {
         return ACVP_NO_CAP;
     }
     json_object_set_string(cap_obj, "algorithm", acvp_lookup_cipher_name(cap_entry->cipher));
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
+
     result = acvp_lookup_prereqVals(cap_obj, cap_entry);
     if (result != ACVP_SUCCESS) { return result; }
 
@@ -173,8 +214,14 @@ static ACVP_RESULT acvp_build_cmac_register_cap(JSON_Object *cap_obj, ACVP_CAPS_
     ACVP_SL_LIST *sl_list;
     ACVP_RESULT result;
     ACVP_CMAC_CAP *cmac_cap = cap_entry->cap.cmac_cap;
+    const char *revision = NULL;
 
     json_object_set_string(cap_obj, "algorithm", acvp_lookup_cipher_name(cap_entry->cipher));
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
+
     result = acvp_lookup_prereqVals(cap_obj, cap_entry);
     if (result != ACVP_SUCCESS) { return result; }
 
@@ -262,8 +309,13 @@ static ACVP_RESULT acvp_build_sym_cipher_register_cap(JSON_Object *cap_obj, ACVP
     ACVP_SL_LIST *sl_list;
     ACVP_RESULT result;
     ACVP_SYM_CIPHER_CAP *sym_cap;
+    const char *revision = NULL;
 
     json_object_set_string(cap_obj, "algorithm", acvp_lookup_cipher_name(cap_entry->cipher));
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
 
     sym_cap = cap_entry->cap.sym_cap;
     if (!sym_cap) {
@@ -471,61 +523,10 @@ static ACVP_RESULT acvp_build_sym_cipher_register_cap(JSON_Object *cap_obj, ACVP
     return ACVP_SUCCESS;
 }
 
-static ACVP_RESULT acvp_lookup_drbg_prereqVals(JSON_Object *cap_obj, ACVP_DRBG_CAP_MODE *drbg_cap_mode) {
-    JSON_Array *prereq_array = NULL;
-    ACVP_PREREQ_LIST *prereq_vals, *next_pre_req;
-    ACVP_PREREQ_ALG_VAL *pre_req;
-    char *alg_str;
-    int i;
-
-    if (!drbg_cap_mode) { return ACVP_INVALID_ARG; }
-
-    /*
-     * Init json array
-     */
-    json_object_set_value(cap_obj, ACVP_PREREQ_OBJ_STR, json_value_init_array());
-    prereq_array = json_object_get_array(cap_obj, ACVP_PREREQ_OBJ_STR);
-
-    /*
-     * return OK if nothing present
-     */
-    prereq_vals = drbg_cap_mode->prereq_vals;
-    if (!prereq_vals) {
-        return ACVP_SUCCESS;
-    }
-
-
-    while (prereq_vals) {
-        JSON_Value *val = NULL;
-        JSON_Object *obj = NULL;
-        val = json_value_init_object();
-        obj = json_value_get_object(val);
-        pre_req = &prereq_vals->prereq_alg_val;
-
-        for (i = 0; i < ACVP_NUM_PREREQS; i++) {
-            if (acvp_prereqs_tbl[i].alg == pre_req->alg) {
-                alg_str = acvp_prereqs_tbl[i].name;
-                json_object_set_string(obj, "algorithm", alg_str);
-                json_object_set_string(obj, ACVP_PREREQ_VAL_STR, pre_req->val);
-                break;
-            }
-        }
-
-        json_array_append_value(prereq_array, val);
-        next_pre_req = prereq_vals->next;
-        prereq_vals = next_pre_req;
-    }
-    return ACVP_SUCCESS;
-}
-
-static char *acvp_lookup_drbg_mode_string(ACVP_CAPS_LIST *cap_entry) {
+static char *acvp_lookup_drbg_mode_string(ACVP_DRBG_CAP_MODE *drbg_cap_mode) {
     char *mode_str = NULL;
 
-    if (!cap_entry) { return NULL; }
-    if (!cap_entry->cap.drbg_cap) { return NULL; }
-    if (!cap_entry->cap.drbg_cap->drbg_cap_mode_list) { return NULL; }
-
-    switch (cap_entry->cap.drbg_cap->drbg_cap_mode_list->cap_mode.mode) {
+    switch (drbg_cap_mode->mode) {
     case ACVP_DRBG_SHA_1:
         mode_str = ACVP_STR_SHA_1;
         break;
@@ -571,10 +572,12 @@ static ACVP_RESULT acvp_build_drbg_register_cap(JSON_Object *cap_obj, ACVP_CAPS_
     JSON_Object *len_obj = NULL;
     JSON_Value *len_val = NULL;
     JSON_Array *array = NULL;
-
-    char *mode_str = acvp_lookup_drbg_mode_string(cap_entry);
-
-    if (!mode_str) { return ACVP_INVALID_ARG; }
+    const char *revision = NULL;
+    ACVP_DRBG_CAP_MODE_LIST *drbg_cap_mode_list = NULL;
+    JSON_Value *val = NULL;
+    JSON_Object *capabilities_obj = NULL;
+    JSON_Array *capabilities_array = NULL;
+    char *mode_str = NULL;
 
     if (!&cap_entry->cap.drbg_cap) {
         return ACVP_NO_CAP;
@@ -588,7 +591,11 @@ static ACVP_RESULT acvp_build_drbg_register_cap(JSON_Object *cap_obj, ACVP_CAPS_
     }
     json_object_set_string(cap_obj, "algorithm", acvp_lookup_cipher_name(cap_entry->cipher));
 
-    result = acvp_lookup_drbg_prereqVals(cap_obj, drbg_cap_mode);
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
+
+    result = acvp_lookup_prereqVals(cap_obj, cap_entry);
     if (result != ACVP_SUCCESS) { return result; }
 
     json_object_set_value(cap_obj, "predResistanceEnabled", json_value_init_array());
@@ -596,90 +603,95 @@ static ACVP_RESULT acvp_build_drbg_register_cap(JSON_Object *cap_obj, ACVP_CAPS_
     json_array_append_boolean(array, drbg_cap_mode->pred_resist_enabled);
     json_object_set_boolean(cap_obj, "reseedImplemented", drbg_cap_mode->reseed_implemented);
 
-    JSON_Array *capabilities_array = NULL;
     json_object_set_value(cap_obj, "capabilities", json_value_init_array());
     capabilities_array = json_object_get_array(cap_obj, "capabilities");
-    JSON_Value *val = NULL;
-    JSON_Object *capabilities_obj = NULL;
-    val = json_value_init_object();
-    capabilities_obj = json_value_get_object(val);
-    json_object_set_string(capabilities_obj, "mode", mode_str);
-    json_object_set_boolean(capabilities_obj, "derFuncEnabled", drbg_cap_mode->der_func_enabled);
 
-    //Set entropy range
-    json_object_set_value(capabilities_obj, "entropyInputLen", json_value_init_array());
-    array = json_object_get_array(capabilities_obj, "entropyInputLen");
-    if (!drbg_cap_mode->entropy_len_step) {
-        if (drbg_cap_mode->entropy_len_min) {
-            json_array_append_number(array, drbg_cap_mode->entropy_len_min);
-        } else if (drbg_cap_mode->entropy_len_max) {
-            json_array_append_number(array, drbg_cap_mode->entropy_len_max);
+    drbg_cap_mode_list = cap_entry->cap.drbg_cap->drbg_cap_mode_list;
+
+     while(drbg_cap_mode_list) {
+        drbg_cap_mode = &drbg_cap_mode_list->cap_mode;
+        mode_str = acvp_lookup_drbg_mode_string(drbg_cap_mode);
+        if (!mode_str) { return ACVP_INVALID_ARG; }
+
+        val = json_value_init_object();
+        capabilities_obj = json_value_get_object(val);
+        json_object_set_string(capabilities_obj, "mode", mode_str);
+        json_object_set_boolean(capabilities_obj, "derFuncEnabled", drbg_cap_mode->der_func_enabled);
+
+        //Set entropy range
+        json_object_set_value(capabilities_obj, "entropyInputLen", json_value_init_array());
+        array = json_object_get_array(capabilities_obj, "entropyInputLen");
+        if (!drbg_cap_mode->entropy_len_step) {
+            if (drbg_cap_mode->entropy_len_min) {
+                json_array_append_number(array, drbg_cap_mode->entropy_len_min);
+            } else if (drbg_cap_mode->entropy_len_max) {
+                json_array_append_number(array, drbg_cap_mode->entropy_len_max);
+            }
+        } else {
+            len_val = json_value_init_object();
+            len_obj = json_value_get_object(len_val);
+            json_object_set_number(len_obj, "max", drbg_cap_mode->entropy_len_max);
+            json_object_set_number(len_obj, "min", drbg_cap_mode->entropy_len_min);
+            json_object_set_number(len_obj, "step", drbg_cap_mode->entropy_len_step);
+            json_array_append_value(array, len_val);
         }
-    } else {
-        len_val = json_value_init_object();
-        len_obj = json_value_get_object(len_val);
-        json_object_set_number(len_obj, "max", drbg_cap_mode->entropy_len_max);
-        json_object_set_number(len_obj, "min", drbg_cap_mode->entropy_len_min);
-        json_object_set_number(len_obj, "step", drbg_cap_mode->entropy_len_step);
-        json_array_append_value(array, len_val);
-    }
 
-    json_object_set_value(capabilities_obj, "nonceLen", json_value_init_array());
-    array = json_object_get_array(capabilities_obj, "nonceLen");
-    if (!drbg_cap_mode->nonce_len_step) {
-        if (drbg_cap_mode->nonce_len_min) {
-            json_array_append_number(array, drbg_cap_mode->nonce_len_min);
-        } else if (drbg_cap_mode->nonce_len_max) {
-            json_array_append_number(array, drbg_cap_mode->nonce_len_max);
+        json_object_set_value(capabilities_obj, "nonceLen", json_value_init_array());
+        array = json_object_get_array(capabilities_obj, "nonceLen");
+        if (!drbg_cap_mode->nonce_len_step) {
+            if (drbg_cap_mode->nonce_len_min) {
+                json_array_append_number(array, drbg_cap_mode->nonce_len_min);
+            } else if (drbg_cap_mode->nonce_len_max) {
+                json_array_append_number(array, drbg_cap_mode->nonce_len_max);
+            }
+        } else {
+            len_val = json_value_init_object();
+            len_obj = json_value_get_object(len_val);
+            json_object_set_number(len_obj, "max", drbg_cap_mode->nonce_len_max);
+            json_object_set_number(len_obj, "min", drbg_cap_mode->nonce_len_min);
+            json_object_set_number(len_obj, "step", drbg_cap_mode->nonce_len_step);
+            json_array_append_value(array, len_val);
         }
-    } else {
-        len_val = json_value_init_object();
-        len_obj = json_value_get_object(len_val);
-        json_object_set_number(len_obj, "max", drbg_cap_mode->nonce_len_max);
-        json_object_set_number(len_obj, "min", drbg_cap_mode->nonce_len_min);
-        json_object_set_number(len_obj, "step", drbg_cap_mode->nonce_len_step);
-        json_array_append_value(array, len_val);
-    }
 
-    json_object_set_value(capabilities_obj, "persoStringLen", json_value_init_array());
-    array = json_object_get_array(capabilities_obj, "persoStringLen");
-    if (!drbg_cap_mode->perso_len_step) {
-        if (drbg_cap_mode->perso_len_min) {
-            json_array_append_number(array, drbg_cap_mode->perso_len_min);
-        } else if (drbg_cap_mode->perso_len_max) {
-            json_array_append_number(array, drbg_cap_mode->perso_len_max);
+        json_object_set_value(capabilities_obj, "persoStringLen", json_value_init_array());
+        array = json_object_get_array(capabilities_obj, "persoStringLen");
+        if (!drbg_cap_mode->perso_len_step) {
+            if (drbg_cap_mode->perso_len_min) {
+                json_array_append_number(array, drbg_cap_mode->perso_len_min);
+            } else if (drbg_cap_mode->perso_len_max) {
+                json_array_append_number(array, drbg_cap_mode->perso_len_max);
+            }
+        } else {
+            len_val = json_value_init_object();
+            len_obj = json_value_get_object(len_val);
+            json_object_set_number(len_obj, "max", drbg_cap_mode->perso_len_max);
+            json_object_set_number(len_obj, "min", drbg_cap_mode->perso_len_min);
+            json_object_set_number(len_obj, "step", drbg_cap_mode->perso_len_step);
+            json_array_append_value(array, len_val);
         }
-    } else {
-        len_val = json_value_init_object();
-        len_obj = json_value_get_object(len_val);
-        json_object_set_number(len_obj, "max", drbg_cap_mode->perso_len_max);
-        json_object_set_number(len_obj, "min", drbg_cap_mode->perso_len_min);
-        json_object_set_number(len_obj, "step", drbg_cap_mode->perso_len_step);
-        json_array_append_value(array, len_val);
-    }
 
-    json_object_set_value(capabilities_obj, "additionalInputLen", json_value_init_array());
-    array = json_object_get_array(capabilities_obj, "additionalInputLen");
-    if (!drbg_cap_mode->additional_in_len_step) {
-        if (drbg_cap_mode->additional_in_len_min) {
-            json_array_append_number(array, drbg_cap_mode->additional_in_len_min);
-        } else if (drbg_cap_mode->additional_in_len_max) {
-            json_array_append_number(array, drbg_cap_mode->additional_in_len_max);
+        json_object_set_value(capabilities_obj, "additionalInputLen", json_value_init_array());
+        array = json_object_get_array(capabilities_obj, "additionalInputLen");
+        if (!drbg_cap_mode->additional_in_len_step) {
+            if (drbg_cap_mode->additional_in_len_min) {
+                json_array_append_number(array, drbg_cap_mode->additional_in_len_min);
+            } else if (drbg_cap_mode->additional_in_len_max) {
+                json_array_append_number(array, drbg_cap_mode->additional_in_len_max);
+            }
+        } else {
+            len_val = json_value_init_object();
+            len_obj = json_value_get_object(len_val);
+            json_object_set_number(len_obj, "max", drbg_cap_mode->additional_in_len_max);
+            json_object_set_number(len_obj, "min", drbg_cap_mode->additional_in_len_min);
+            json_object_set_number(len_obj, "step", drbg_cap_mode->additional_in_len_step);
+            json_array_append_value(array, len_val);
         }
-    } else {
-        len_val = json_value_init_object();
-        len_obj = json_value_get_object(len_val);
-        json_object_set_number(len_obj, "max", drbg_cap_mode->additional_in_len_max);
-        json_object_set_number(len_obj, "min", drbg_cap_mode->additional_in_len_min);
-        json_object_set_number(len_obj, "step", drbg_cap_mode->additional_in_len_step);
-        json_array_append_value(array, len_val);
+
+        //Set DRBG Length
+        json_object_set_number(capabilities_obj, "returnedBitsLen", drbg_cap_mode->returned_bits_len);
+        json_array_append_value(capabilities_array, val);
+        drbg_cap_mode_list = drbg_cap_mode_list->next;
     }
-
-    //Set DRBG Length
-    json_object_set_number(capabilities_obj, "returnedBitsLen", drbg_cap_mode->returned_bits_len);
-
-    json_array_append_value(capabilities_array, val);
-
     return ACVP_SUCCESS;
 }
 
@@ -748,8 +760,14 @@ static ACVP_RESULT acvp_lookup_rsa_primes(JSON_Object *cap_obj, ACVP_RSA_KEYGEN_
 
 static ACVP_RESULT acvp_build_rsa_keygen_register_cap(JSON_Object *cap_obj, ACVP_CAPS_LIST *cap_entry) {
     ACVP_RESULT result;
+    const char *revision = NULL;
 
     json_object_set_string(cap_obj, "algorithm", "RSA");
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
+
     json_object_set_string(cap_obj, "mode", "keyGen");
 
     result = acvp_lookup_prereqVals(cap_obj, cap_entry);
@@ -806,8 +824,14 @@ static ACVP_RESULT acvp_build_rsa_sig_register_cap(JSON_Object *cap_obj, ACVP_CA
     JSON_Array *alg_specs_array = NULL, *sig_type_caps_array = NULL, *hash_pair_array = NULL;
     JSON_Value *alg_specs_val = NULL, *sig_type_val = NULL, *hash_pair_val = NULL;
     JSON_Object *alg_specs_obj = NULL, *sig_type_obj = NULL, *hash_pair_obj = NULL;
+    const char *revision = NULL;
 
     json_object_set_string(cap_obj, "algorithm", "RSA");
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
+
     if (cap_entry->cipher == ACVP_RSA_SIGGEN) {
         json_object_set_string(cap_obj, "mode", "sigGen");
         rsa_cap_mode = cap_entry->cap.rsa_siggen_cap;
@@ -879,8 +903,13 @@ static ACVP_RESULT acvp_build_ecdsa_register_cap(ACVP_CIPHER cipher, JSON_Object
     ACVP_NAME_LIST *current_curve = NULL, *current_secret_mode = NULL, *current_hash = NULL;
     JSON_Value *alg_caps_val = NULL;
     JSON_Object *alg_caps_obj = NULL;
+    const char *revision = NULL;
 
     json_object_set_string(cap_obj, "algorithm", "ECDSA");
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
 
     switch (cipher) {
     case ACVP_ECDSA_KEYGEN:
@@ -985,8 +1014,14 @@ static ACVP_RESULT acvp_build_ecdsa_register_cap(ACVP_CIPHER cipher, JSON_Object
 static ACVP_RESULT acvp_build_kdf135_tls_register_cap(JSON_Object *cap_obj, ACVP_CAPS_LIST *cap_entry) {
     JSON_Array *temp_arr = NULL;
     ACVP_RESULT result;
+    const char *revision = NULL;
 
     json_object_set_string(cap_obj, "algorithm", ACVP_KDF135_ALG_STR);
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
+
     json_object_set_string(cap_obj, "mode", ACVP_ALG_KDF135_TLS);
     json_object_set_value(cap_obj, "tlsVersion", json_value_init_array());
     temp_arr = json_object_get_array(cap_obj, "tlsVersion");
@@ -1025,8 +1060,14 @@ static ACVP_RESULT acvp_build_kdf135_snmp_register_cap(JSON_Object *cap_obj, ACV
     JSON_Array *temp_arr = NULL;
     ACVP_NAME_LIST *current_engid;
     ACVP_SL_LIST *current_val;
+    const char *revision = NULL;
 
     json_object_set_string(cap_obj, "algorithm", ACVP_KDF135_ALG_STR);
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
+
     json_object_set_string(cap_obj, "mode", ACVP_ALG_KDF135_SNMP);
 
     result = acvp_lookup_prereqVals(cap_obj, cap_entry);
@@ -1107,8 +1148,13 @@ static ACVP_RESULT acvp_build_kdf108_register_cap(JSON_Object *cap_obj, ACVP_CAP
     JSON_Array *alg_specs_array = NULL;
     JSON_Value *alg_specs_counter_val = NULL, *alg_specs_feedback_val = NULL, *alg_specs_dpi_val = NULL;
     JSON_Object *alg_specs_counter_obj = NULL, *alg_specs_feedback_obj = NULL, *alg_specs_dpi_obj = NULL;
+    const char *revision = NULL;
 
     json_object_set_string(cap_obj, "algorithm", "KDF");
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
 
     result = acvp_lookup_prereqVals(cap_obj, cap_entry);
     if (result != ACVP_SUCCESS) { return result; }
@@ -1146,8 +1192,14 @@ static ACVP_RESULT acvp_build_kdf135_x963_register_cap(JSON_Object *cap_obj, ACV
     JSON_Array *tmp_arr = NULL;
     ACVP_NAME_LIST *nl_obj;
     ACVP_SL_LIST *sl_obj;
+    const char *revision = NULL;
 
     json_object_set_string(cap_obj, "algorithm", ACVP_KDF135_ALG_STR);
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
+
     json_object_set_string(cap_obj, "mode", "ansix9.63");
 
     result = acvp_lookup_prereqVals(cap_obj, cap_entry);
@@ -1199,8 +1251,14 @@ static ACVP_RESULT acvp_build_kdf135_ikev2_register_cap(JSON_Object *cap_obj, AC
     JSON_Object *tmp_obj = NULL, *alg_specs_obj = NULL;
     ACVP_NAME_LIST *current_hash;
     ACVP_KDF135_IKEV2_CAP *cap = cap_entry->cap.kdf135_ikev2_cap;
+    const char *revision = NULL;
 
     json_object_set_string(cap_obj, "algorithm", ACVP_KDF135_ALG_STR);
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
+
     json_object_set_string(cap_obj, "mode", ACVP_ALG_KDF135_IKEV2);
     result = acvp_lookup_prereqVals(cap_obj, cap_entry);
     if (result != ACVP_SUCCESS) { return result; }
@@ -1287,8 +1345,14 @@ static ACVP_RESULT acvp_build_kdf135_ikev1_register_cap(JSON_Object *cap_obj, AC
     JSON_Value *alg_specs_val = NULL, *tmp_val = NULL;
     JSON_Object *alg_specs_obj = NULL, *tmp_obj = NULL;
     ACVP_NAME_LIST *current_hash;
+    const char *revision = NULL;
 
     json_object_set_string(cap_obj, "algorithm", ACVP_KDF135_ALG_STR);
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
+
     json_object_set_string(cap_obj, "mode", ACVP_ALG_KDF135_IKEV1);
     result = acvp_lookup_prereqVals(cap_obj, cap_entry);
     if (result != ACVP_SUCCESS) { return result; }
@@ -1360,8 +1424,14 @@ static ACVP_RESULT acvp_build_kdf135_srtp_register_cap(JSON_Object *cap_obj, ACV
     JSON_Array *tmp_arr = NULL;
     int i;
     ACVP_SL_LIST *current_aes_keylen;
+    const char *revision = NULL;
 
     json_object_set_string(cap_obj, "algorithm", ACVP_KDF135_ALG_STR);
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
+
     json_object_set_string(cap_obj, "mode", ACVP_ALG_KDF135_SRTP);
 
     result = acvp_lookup_prereqVals(cap_obj, cap_entry);
@@ -1391,8 +1461,14 @@ static ACVP_RESULT acvp_build_kdf135_srtp_register_cap(JSON_Object *cap_obj, ACV
 static ACVP_RESULT acvp_build_kdf135_ssh_register_cap(JSON_Object *cap_obj, ACVP_CAPS_LIST *cap_entry) {
     JSON_Array *temp_arr = NULL;
     ACVP_RESULT result;
+    const char *revision = NULL;
 
     json_object_set_string(cap_obj, "algorithm", acvp_lookup_cipher_name(cap_entry->cipher));
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
+
     json_object_set_string(cap_obj, "mode", ACVP_ALG_KDF135_SSH);
     json_object_set_value(cap_obj, "cipher", json_value_init_array());
     temp_arr = json_object_get_array(cap_obj, "cipher");
@@ -1745,11 +1821,16 @@ static ACVP_RESULT acvp_build_dsa_register_cap(JSON_Object *cap_obj,
                                                ACVP_DSA_MODE mode) {
     ACVP_RESULT result;
     JSON_Array *meth_array = NULL;
+    const char *revision = NULL;
 
     if (!cap_entry->cap.dsa_cap) {
         return ACVP_NO_CAP;
     }
     json_object_set_string(cap_obj, "algorithm", "DSA");
+
+    revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+    if (revision == NULL) return ACVP_INVALID_ARG;
+    json_object_set_string(cap_obj, "revision", revision);
 
     switch (mode) {
     case ACVP_DSA_MODE_PQGGEN:
@@ -1885,6 +1966,7 @@ static ACVP_RESULT acvp_build_kas_ecc_register_cap(ACVP_CTX *ctx,
     ACVP_KAS_ECC_SET kdf;
     ACVP_KAS_ECC_SCHEMES scheme;
     int set;
+    const char *revision = NULL;
 
     kas_ecc_cap = cap_entry->cap.kas_ecc_cap;
     if (!kas_ecc_cap) {
@@ -1893,6 +1975,11 @@ static ACVP_RESULT acvp_build_kas_ecc_register_cap(ACVP_CTX *ctx,
     kas_ecc_mode = &kas_ecc_cap->kas_ecc_mode[i - 1];
     if (kas_ecc_mode->prereq_vals) {
         json_object_set_string(cap_obj, "algorithm", acvp_lookup_cipher_name(cap_entry->cipher));
+
+        revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+        if (revision == NULL) return ACVP_INVALID_ARG;
+        json_object_set_string(cap_obj, "revision", revision);
+
         switch (kas_ecc_mode->cap_mode) {
         case ACVP_KAS_ECC_MODE_CDH:
             json_object_set_string(cap_obj, "mode", "CDH-Component");
@@ -2206,6 +2293,7 @@ static ACVP_RESULT acvp_build_kas_ffc_register_cap(ACVP_CTX *ctx,
     ACVP_KAS_FFC_SET kdf;
     ACVP_KAS_FFC_SCHEMES scheme;
     int set;
+    const char *revision = NULL;
 
     kas_ffc_cap = cap_entry->cap.kas_ffc_cap;
     if (!kas_ffc_cap) {
@@ -2214,6 +2302,11 @@ static ACVP_RESULT acvp_build_kas_ffc_register_cap(ACVP_CTX *ctx,
     kas_ffc_mode = &kas_ffc_cap->kas_ffc_mode[i - 1];
     if (kas_ffc_mode->prereq_vals) {
         json_object_set_string(cap_obj, "algorithm", acvp_lookup_cipher_name(cap_entry->cipher));
+
+        revision = acvp_lookup_cipher_revision(cap_entry->cipher);
+        if (revision == NULL) return ACVP_INVALID_ARG;
+        json_object_set_string(cap_obj, "revision", revision);
+
         switch (kas_ffc_mode->cap_mode) {
         case ACVP_KAS_FFC_MODE_COMPONENT:
             json_object_set_string(cap_obj, "mode", "Component");
@@ -2390,53 +2483,6 @@ static ACVP_RESULT acvp_build_kas_ffc_register_cap(ACVP_CTX *ctx,
     return ACVP_SUCCESS;
 }
 
-#if 0
-/*
- * This function builds the JSON message to register an OE dependency
- * with the validating server
- */
-ACVP_RESULT acvp_build_dependency(ACVP_DEPENDENCY_LIST *dep, char **reg) {
-    JSON_Value *reg_arry_val = NULL;
-    JSON_Value *ver_val = NULL;
-    JSON_Object *ver_obj = NULL;
-    ACVP_KV_LIST *kv_list;
-    JSON_Array *reg_arry = NULL;
-    JSON_Value *val = NULL;
-    JSON_Object *obj = NULL;
-
-    if (!dep) {
-        return ACVP_MISSING_ARG;
-    }
-
-    /*
-     * Start the registration array
-     */
-    reg_arry_val = json_value_init_array();
-    reg_arry = json_array((const JSON_Value *)reg_arry_val);
-
-    ver_val = json_value_init_object();
-    ver_obj = json_value_get_object(ver_val);
-
-    json_object_set_string(ver_obj, "acvVersion", ACVP_VERSION);
-    json_array_append_value(reg_arry, ver_val);
-
-    val = json_value_init_object();
-    obj = json_value_get_object(val);
-
-    kv_list = dep->attrs_list;
-    while (kv_list) {
-        json_object_set_string(obj, kv_list->key, kv_list->value);
-        kv_list = kv_list->next;
-    }
-
-    json_array_append_value(reg_arry, val);
-    *reg = json_serialize_to_string_pretty(reg_arry_val);
-    json_value_free(reg_arry_val);
-
-    return ACVP_SUCCESS;
-}
-#endif
-
 /*
  * This function builds the JSON register message that
  * will be sent to the ACVP server to advertised the crypto
@@ -2477,12 +2523,8 @@ ACVP_RESULT acvp_build_test_session(ACVP_CTX *ctx, char **reg, int *out_len) {
     val = json_value_init_object();
     obj = json_value_get_object(val);
 
-    json_object_set_string(obj, "moduleUrl", ctx->module_url);
     if (ctx->is_sample) {
         json_object_set_boolean(obj, "isSample", 1);
-    }
-    if (ctx->debug_request) {
-        json_object_set_string(obj, "debugRequest", "yes");
     }
 
     /*
@@ -2536,6 +2578,12 @@ ACVP_RESULT acvp_build_test_session(ACVP_CTX *ctx, char **reg, int *out_len) {
             case ACVP_HASH_SHA256:
             case ACVP_HASH_SHA384:
             case ACVP_HASH_SHA512:
+            case ACVP_HASH_SHA3_224:
+            case ACVP_HASH_SHA3_256:
+            case ACVP_HASH_SHA3_384:
+            case ACVP_HASH_SHA3_512:
+            case ACVP_HASH_SHAKE_128:
+            case ACVP_HASH_SHAKE_256:
                 rv = acvp_build_hash_register_cap(cap_obj, cap_entry);
                 break;
             case ACVP_HASHDRBG:
@@ -2663,170 +2711,167 @@ ACVP_RESULT acvp_build_test_session(ACVP_CTX *ctx, char **reg, int *out_len) {
     return ACVP_SUCCESS;
 }
 
-#if 0
+static JSON_Value *acvp_version_json_value(void) {
+    JSON_Value *version_val = NULL;
+    JSON_Object *version_obj = NULL;
+
+    version_val = json_value_init_object();
+    version_obj = json_value_get_object(version_val);
+
+    json_object_set_string(version_obj, "acvVersion", ACVP_VERSION);
+
+    return version_val;
+}
+
 /*
  * This function builds the JSON message to register an OE with the
  * validating crypto server
  */
-ACVP_RESULT acvp_build_oes(ACVP_CTX *ctx, char **reg) {
-    JSON_Value *reg_arry_val = NULL;
-    JSON_Value *ver_val = NULL;
-    JSON_Object *ver_obj = NULL;
-
-    JSON_Array *reg_arry = NULL;
-
-    JSON_Value *val = NULL;
+ACVP_RESULT acvp_build_validation(ACVP_CTX *ctx,
+                                  char **out,
+                                  int *out_len) {
+    JSON_Value *top_array_val = NULL, *val = NULL;
+    JSON_Array *top_array = NULL;
     JSON_Object *obj = NULL;
-    JSON_Array *dep_array_val = NULL;
+    ACVP_OE *oe = ctx->fips.oe;
+    ACVP_MODULE *module = ctx->fips.module;
 
-    if (!ctx) {
-        ACVP_LOG_ERR("No ctx for build_oes");
-        return ACVP_NO_CTX;
-    }
+    if (!ctx) return ACVP_NO_CTX;
 
     /*
-     * Start the registration array
+     * Start top-level array
      */
-    reg_arry_val = json_value_init_array();
-    reg_arry = json_array((const JSON_Value *)reg_arry_val);
+    top_array_val = json_value_init_array();
+    top_array = json_array((const JSON_Value *)top_array_val);
+    json_array_append_value(top_array, acvp_version_json_value());
 
-    ver_val = json_value_init_object();
-    ver_obj = json_value_get_object(ver_val);
-
-    json_object_set_string(ver_obj, "acvVersion", ACVP_VERSION);
-    json_array_append_value(reg_arry, ver_val);
-
+    /*
+     * Start the next object, which will be appended to the top-level array
+     */
     val = json_value_init_object();
     obj = json_value_get_object(val);
 
-    json_object_set_string(obj, "name", ctx->oe_name);
-    json_object_set_value(obj, "dependencyUrls", json_value_init_array());
-    dep_array_val = json_object_get_array(obj, "dependencyUrls");
-
-    ACVP_DEPENDENCY_LIST *dependency = ctx->dependency_list;
-    while (dependency) {
-        json_array_append_string(dep_array_val, dependency->url);
-        dependency = dependency->next;
-    }
-
-    json_array_append_value(reg_arry, val);
-    *reg = json_serialize_to_string_pretty(reg_arry_val);
-    json_value_free(reg_arry_val);
-
-    return ACVP_SUCCESS;
-}
-
-/*
- * This function builds the JSON message that registers a module with
- * the validating crypto server
- */
-ACVP_RESULT acvp_build_modules(ACVP_CTX *ctx, char **reg) {
-    JSON_Value *reg_arry_val = NULL;
-    JSON_Value *ver_val = NULL;
-    JSON_Object *ver_obj = NULL;
-
-    JSON_Array *reg_arry = NULL;
-
-    JSON_Value *val = NULL;
-    JSON_Object *obj = NULL;
-
-    if (!ctx) {
-        ACVP_LOG_ERR("No ctx for build_modules");
-        return ACVP_NO_CTX;
-    }
-
     /*
-     * Start the registration array
+     * Add the OE
      */
-    reg_arry_val = json_value_init_array();
-    reg_arry = json_array((const JSON_Value *)reg_arry_val);
+    if (oe->url) {
+        json_object_set_string(obj, "oeUrl", oe->url);
+    } else {
+        /* Need to create a new OE */
+        JSON_Value *oe_val = NULL;
+        JSON_Object *oe_obj = NULL;
 
-    ver_val = json_value_init_object();
-    ver_obj = json_value_get_object(ver_val);
+        oe_val = json_value_init_object();
+        oe_obj = json_value_get_object(oe_val);
 
-    json_object_set_string(ver_obj, "acvVersion", ACVP_VERSION);
-    json_array_append_value(reg_arry, ver_val);
+        json_object_set_string(oe_obj, "name", oe->name);
 
-    val = json_value_init_object();
-    obj = json_value_get_object(val);
+        if (oe->dependencies.status == ACVP_RESOURCE_STATUS_COMPLETE ||
+            oe->dependencies.status == ACVP_RESOURCE_STATUS_PARTIAL) {
+            /*
+             * There are some "complete" urls to record.
+             */
+            JSON_Array *dep_url_array = NULL;
+            int i = 0;
 
-    json_object_set_string(obj, "name", ctx->module_name);
-    json_object_set_string(obj, "version", ctx->module_version);
-    json_object_set_string(obj, "type", ctx->module_type);
-    json_object_set_string(obj, "vendorUrl", ctx->vendor_url);
-    json_object_set_string(obj, "implementationDescription", ctx->module_desc);
+            json_object_set_value(oe_obj, "dependencyUrls", json_value_init_array());
+            dep_url_array = json_object_get_array(oe_obj, "dependencyUrls");
 
-    json_array_append_value(reg_arry, val);
-    *reg = json_serialize_to_string_pretty(reg_arry_val);
-    json_value_free(reg_arry_val);
-
-    return ACVP_SUCCESS;
-}
-
-/*
- * This function builds the JSON message to register a vendor with the
- * validating crypto server
- */
-ACVP_RESULT acvp_build_vendors(ACVP_CTX *ctx, char **reg) {
-    JSON_Value *reg_arry_val = NULL;
-    JSON_Value *ver_val = NULL;
-    JSON_Object *ver_obj = NULL;
-
-    JSON_Array *reg_arry = NULL, *contact_array = NULL;
-
-    JSON_Value *val = NULL;
-    JSON_Object *obj = NULL;
-
-    /*
-     * As of right now, we only support one contact with a name, website,
-     * contact name, and contact email
-     */
-    JSON_Value *contact_val = NULL;
-    JSON_Object *contact_obj = NULL;
-    JSON_Array *email_array = NULL;
-
-    if (!ctx) {
-        ACVP_LOG_ERR("No ctx for build vendor");
-        return ACVP_NO_CTX;
-    }
-
-    /*
-     * Start the registration array
-     */
-    reg_arry_val = json_value_init_array();
-    reg_arry = json_array((const JSON_Value *)reg_arry_val);
-
-    ver_val = json_value_init_object();
-    ver_obj = json_value_get_object(ver_val);
-
-    json_object_set_string(ver_obj, "acvVersion", ACVP_VERSION);
-    json_array_append_value(reg_arry, ver_val);
-
-    val = json_value_init_object();
-    obj = json_value_get_object(val);
-
-    json_object_set_string(obj, "name", ctx->vendor_name);
-    if (ctx->vendor_website) json_object_set_string(obj, "website", ctx->vendor_website);
-    if (ctx->contact_name || ctx->contact_email) {
-        json_object_set_value(obj, "contacts", json_value_init_array());
-        contact_array = json_object_get_array(obj, "contacts");
-
-        contact_val = json_value_init_object();
-        contact_obj = json_value_get_object(contact_val);
-
-        if (ctx->contact_name) json_object_set_string(contact_obj, "name", ctx->contact_name);
-        if (ctx->contact_email) {
-            json_object_set_value(contact_obj, "emails", json_value_init_array());
-            email_array = json_object_get_array(obj, "emails");
-            json_array_append_string(email_array, ctx->contact_email);
+            for (i = 0; i < oe->dependencies.count; i++) {
+                ACVP_DEPENDENCY *dependency = oe->dependencies.deps[i];
+                if (dependency->url) {
+                    json_array_append_string(dep_url_array, dependency->url);
+                }
+            }
         }
-        json_array_append_value(contact_array, contact_val);
-    }
-    json_array_append_value(reg_arry, val);
 
-    *reg = json_serialize_to_string_pretty(reg_arry_val);
-    json_value_free(reg_arry_val);
+        if (oe->dependencies.status == ACVP_RESOURCE_STATUS_INCOMPLETE ||
+            oe->dependencies.status == ACVP_RESOURCE_STATUS_PARTIAL) {
+            /*
+             * There are some dependencies that we need to create.
+             */
+            JSON_Array *dep_array = NULL;
+            int i = 0;
+
+            json_object_set_value(oe_obj, "dependencies", json_value_init_array());
+            dep_array = json_object_get_array(oe_obj, "dependencies");
+
+            for (i = 0; i < oe->dependencies.count; i++) {
+                ACVP_DEPENDENCY *dependency = oe->dependencies.deps[i];
+
+                if (dependency->url == NULL) {
+                    JSON_Value *dep_val = json_value_init_object();;
+                    JSON_Object *dep_obj = json_value_get_object(dep_val);
+
+                    if (dependency->type) {
+                        json_object_set_string(dep_obj, "type", dependency->type);
+                    }
+                    if (dependency->name) {
+                        json_object_set_string(dep_obj, "name", dependency->name);
+                    }
+                    if (dependency->description) {
+                        json_object_set_string(dep_obj, "description", dependency->description);
+                    }
+
+                    json_array_append_value(dep_array, dep_val);
+                }
+            }
+        }
+
+        /*
+         * Attach the OE object
+         */
+        json_object_set_value(obj, "oe", oe_val);
+    }
+
+    /*
+     * Add the Module
+     */
+    if (module->url) {
+        json_object_set_string(obj, "moduleUrl", module->url);
+    } else {
+        /* Need to create a new Module */
+        JSON_Value *module_val = NULL;
+        JSON_Object *module_obj = NULL;
+        JSON_Array *contact_url_array = NULL;
+        int i = 0;
+
+        module_val = json_value_init_object();
+        module_obj = json_value_get_object(module_val);
+
+        json_object_set_string(module_obj, "name", module->name);
+        if (module->version) {
+            json_object_set_string(module_obj, "version", module->version);
+        }
+        if (module->type) {
+            json_object_set_string(module_obj, "type", module->type);
+        }
+        if (module->description) {
+            json_object_set_string(module_obj, "description", module->description);
+        }
+
+        json_object_set_string(module_obj, "vendorUrl", module->vendor->url);
+        json_object_set_string(module_obj, "addressUrl", module->vendor->address.url);
+
+        json_object_set_value(module_obj, "contactUrls", json_value_init_array());
+        contact_url_array = json_object_get_array(module_obj, "contactUrls");
+
+        for (i = 0; i < module->vendor->persons.count; i++) {
+            ACVP_PERSON *person = &module->vendor->persons.person[i];
+            json_array_append_string(contact_url_array, person->url);
+        }
+
+        /*
+         * Attach the Module object
+         */
+        json_object_set_value(obj, "module", module_val);
+    }
+
+    json_array_append_value(top_array, val);
+    *out = json_serialize_to_string(top_array_val, out_len);
+
+    if (top_array_val) json_value_free(top_array_val);
 
     return ACVP_SUCCESS;
 }
-#endif
+

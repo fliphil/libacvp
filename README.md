@@ -9,16 +9,15 @@
         The ACVP specification is a work-in-progress and can be found at
         https://github.com/usnistgov/ACVP
 
+License
+        Libacvp is licensed under the Apache License 2.0, which means that
+        you are free to get and use it for commercial and non-commercial
+        purposes as long as you fulfill its conditions. See the LICENSE
+        file for details.
 
 Recent Changes!
-    
-    The library API has been updated as of **August 2018** to store hex buffers
-    as their equivalent byte arrays. This simplifies the responsibilities of
-    the application layer as most C crypto libraries ingest/output byte
-    arrays by default. From now on, test case properties that show in the ACVP
-    spec as hex strings will be stored as byte arrays, and the library will
-    expect the application to populate result attributes as byte arrays and to
-    fill in the corresponding length attribute. For examples, see app/app_main.c.
+        The client library has been updated to be compatible with the
+        ACVP spec version 1.0, see https://github.com/usnistgov/ACVP
 
 Overview
 
@@ -119,17 +118,32 @@ Building
     To run:
         1. export LD_LIBRARY_PATH=<path to ssl lib>
         2. update and run scripts/nist_setup.sh
-        3. ./app/acvp_app
+        3. ./app/acvp_app --<options>
+
+            To test offline:
+               a) Download vectors on network accessible device
+                   ./app/acvp_app --<algs of choice or all_algs> --vector_req <filename1>
+               b) Copy vectors and acvp_app to target
+                   ./app/acvp_app --all_algs --vector_req <filename1> --vector_rsp <filename2>
+               c) Copy respones(filename2) to network accessible device
+                   ./app/acvp_app --all_algs --vector_upload <filename2>
+
+               Note: If the target in step b does not have the standard libraries used by
+                     libacvp you may ./configure a special app used only for step b. This
+                     can be done by using --enable-offline and --enable-static when running 
+                     ./configure and do not use --with-libcurl-dir or --with-libmurl-dir which
+                     will  minimize the library dependencies to libcrypto.so only(for the case
+                     of FOM testing). For example:
+
+              ./configure --with-ssl-dir=<ciscossl install> --prefix=<libacvp install> --with-fom-dir=<fom install> --enable-static --enable-offline
 
     On Windows:
         1. Update and run the scripts/gradle_env.bat script
-            Note: some of the required .dll's and include headers are in the windows directory.
-                  If these aren't the version you are looking for, you will need to point
-                  the environment variables to your own install.
         2. 'gradle build'
         3. Update and run the scripts/nist_setup.bat script
         4. The library is in build/libs/acvp and the example executable
             is in build/exe/
+
 
 
 Testing

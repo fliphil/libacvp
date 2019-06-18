@@ -1,28 +1,12 @@
-/*****************************************************************************
-* Copyright (c) 2019, Cisco Systems, Inc.
-* All rights reserved.
+/*
+ * Copyright (c) 2019, Cisco Systems, Inc.
+ *
+ * Licensed under the Apache License 2.0 (the "License").  You may not use
+ * this file except in compliance with the License.  You can obtain a copy
+ * in the file LICENSE in the source distribution or at
+ * https://github.com/cisco/libacvp/LICENSE
+ */
 
-* Redistribution and use in source and binary forms, with or without modification,
-* are permitted provided that the following conditions are met:
-*
-* 1. Redistributions of source code must retain the above copyright notice,
-*    this list of conditions and the following disclaimer.
-*
-* 2. Redistributions in binary form must reproduce the above copyright notice,
-*    this list of conditions and the following disclaimer in the documentation
-*    and/or other materials provided with the distribution.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
-* USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*****************************************************************************/
 /*
  * This module is not part of libacvp.  Rather, it's a simple app that
  * demonstrates how to use libacvp. Software that use libacvp
@@ -69,27 +53,22 @@ static void setup_session_parameters() {
     if (!port) port = DEFAULT_PORT;
 
     path_segment = getenv("ACV_URI_PREFIX");
-    if (!path_segment) path_segment = "";
+    if (!path_segment) path_segment = DEFAULT_URI_PREFIX;
 
     api_context = getenv("ACV_API_CONTEXT");
     if (!api_context) api_context = "";
 
     ca_chain_file = getenv("ACV_CA_FILE");
-    if (!ca_chain_file) ca_chain_file = DEFAULT_CA_CHAIN;
-
     cert_file = getenv("ACV_CERT_FILE");
-    if (!cert_file) cert_file = DEFAULT_CERT;
-
     key_file = getenv("ACV_KEY_FILE");
-    if (!key_file) key_file = DEFAULT_KEY;
 
     printf("Using the following parameters:\n\n");
     printf("    ACV_SERVER:     %s\n", server);
     printf("    ACV_PORT:       %d\n", port);
     printf("    ACV_URI_PREFIX: %s\n", path_segment);
-    printf("    ACV_CA_FILE:    %s\n", ca_chain_file);
-    printf("    ACV_CERT_FILE:  %s\n", cert_file);
-    printf("    ACV_KEY_FILE:   %s\n\n", key_file);
+    if (ca_chain_file) printf("    ACV_CA_FILE:    %s\n", ca_chain_file);
+    if (cert_file) printf("    ACV_CERT_FILE:  %s\n", cert_file);
+    if (key_file) printf("    ACV_KEY_FILE:   %s\n\n", key_file);
 }
 
 /*
@@ -110,10 +89,7 @@ static void app_cleanup(ACVP_CTX *ctx) {
 int main(int argc, char **argv) {
     ACVP_RESULT rv = ACVP_SUCCESS;
     ACVP_CTX *ctx = NULL;
-    char ssl_version[10];
     APP_CONFIG cfg = { 0 };
-    char *oe_name = "Ubuntu Linux 3.1 on AMD 6272 Opteron Processor with Acme package installed";
-    ACVP_KV_LIST *key_val_list = calloc(1, sizeof(ACVP_KV_LIST));
 
     if (ingest_cli(&cfg, argc, argv)) {
         return 1;
@@ -125,7 +101,7 @@ int main(int argc, char **argv) {
     fips_algtest_init_nofips();
 #endif
 
-    setup_session_parameters();
+     setup_session_parameters();
 
     /*
      * We begin the libacvp usage flow here.
@@ -137,57 +113,12 @@ int main(int argc, char **argv) {
         goto end;
     }
 
-    if (cfg.dev) {
-        rv = acvp_enable_debug_request(ctx);
-        if (rv != ACVP_SUCCESS) {
-            printf("Failed to enable debug request: %s\n", acvp_lookup_error_string(rv));
-            goto end;
-        }
-    }
-
     /*
      * Next we specify the ACVP server address
      */
     rv = acvp_set_server(ctx, server, port);
     if (rv != ACVP_SUCCESS) {
         printf("Failed to set server/port\n");
-        goto end;
-    }
-
-    /*
-     * Setup the vendor attributes
-     */
-    rv = acvp_set_vendor_info(ctx, "Acme Fictional Corporation", "www.acme-fictional.com", "Wyle E. Coyote", "wcoyote@acme-fictional.com");
-    if (rv != ACVP_SUCCESS) {
-        printf("Failed to set vendor info\n");
-        goto end;
-    }
-
-    /*
-     * Setup the crypto module attributes
-     */
-    snprintf(ssl_version, 10, "%08x", (unsigned int)SSLeay());
-    rv = acvp_set_module_info(ctx, "OpenSSL", "software", ssl_version, "FOM 6.2a");
-    if (rv != ACVP_SUCCESS) {
-        printf("Failed to set module info\n");
-        goto end;
-    }
-
-    key_val_list->key = calloc(4 + 1, sizeof(char));
-    strcpy_s(key_val_list->key, 4 + 1, "type");
-    key_val_list->value = calloc(8 + 1, sizeof(char));
-    strcpy_s(key_val_list->value, 8 + 1, "software");
-
-    key_val_list->next = calloc(1, sizeof(ACVP_KV_LIST));
-
-    key_val_list->next->key = calloc(4 + 1, sizeof(char));
-    strcpy_s(key_val_list->next->key, 4 + 1, "name");
-    key_val_list->next->value = calloc(9 + 1, sizeof(char));
-    strcpy_s(key_val_list->next->value, 9 + 1, "Linux 3.1");
-
-    rv = acvp_add_oe_dependency(ctx, oe_name, key_val_list);
-    if (rv != ACVP_SUCCESS) {
-        printf("Failed to set module info\n");
         goto end;
     }
 
@@ -210,33 +141,35 @@ int main(int argc, char **argv) {
     }
 
 #if 0
-    /*
-     * Next we provide the CA certs to be used by libacvp
-     * to verify the ACVP TLS certificate.
-     */
-    rv = acvp_set_cacerts(ctx, ca_chain_file);
-    if (rv != ACVP_SUCCESS) {
-        printf("Failed to set CA certs\n");
-        goto end;
+    if (ca_chain_file) {
+        /*
+         * Next we provide the CA certs to be used by libacvp
+         * to verify the ACVP TLS certificate.
+         */
+        rv = acvp_set_cacerts(ctx, ca_chain_file);
+        if (rv != ACVP_SUCCESS) {
+            printf("Failed to set CA certs\n");
+            goto end;
+        }
+    }
+
+    if (cert_file && key_file) {
+        /*
+         * Specify the certificate and private key the client should used
+         * for TLS client auth.
+         */
+        rv = acvp_set_certkey(ctx, cert_file, key_file);
+        if (rv != ACVP_SUCCESS) {
+            printf("Failed to set TLS cert/key\n");
+            goto end;
+        }
     }
 
     /*
-     * Specify the certificate and private key the client should used
-     * for TLS client auth.
+     * Setup the Two-factor authentication
+     * This may or may not be turned on...
      */
-    rv = acvp_set_certkey(ctx, cert_file, key_file);
-    if (rv != ACVP_SUCCESS) {
-        printf("Failed to set TLS cert/key\n");
-        goto end;
-    }
-
-    /*
-     * Specify the callback to be used for 2-FA to perform
-     * TOTP calculation
-     */
-    rv = acvp_set_2fa_callback(ctx, &totp);
-    if (rv != ACVP_SUCCESS) {
-        printf("Failed to set Two-factor authentication callback\n");
+    if (app_setup_two_factor_auth(ctx)) {
         goto end;
     }
 #endif
@@ -244,6 +177,16 @@ int main(int argc, char **argv) {
     if (cfg.sample) {
         acvp_mark_as_sample(ctx);
     }
+
+    if (cfg.vector_req && !cfg.vector_rsp) {
+        acvp_mark_as_request_only(ctx, cfg.vector_req_file);
+    }
+
+    if (!cfg.vector_req && cfg.vector_rsp) {
+        printf("Offline vector processing requires both options, --vector_req and --vector_rsp\n");
+        goto end;
+    }
+
 
     if (cfg.json) {
         /*
@@ -271,33 +214,44 @@ int main(int argc, char **argv) {
        goto end;
     }
 
-    /*
-     * Now that we have a test session, we register with
-     * the server to advertise our capabilities and receive
-     * the KAT vector sets the server demands that we process.
-     */
-    rv = acvp_register(ctx);
-    if (rv != ACVP_SUCCESS) {
-        printf("Failed to register with ACVP server (rv=%d)\n", rv);
-        goto end;
+    if (cfg.vector_req && cfg.vector_rsp) {
+       rv = acvp_run_vectors_from_file(ctx, cfg.vector_req_file, cfg.vector_rsp_file);
+       goto end;
+    }
+
+    if (cfg.vector_upload) {
+       rv = acvp_upload_vectors_from_file(ctx, cfg.vector_upload_file);
+       goto end;
+    }
+
+    if (cfg.fips_validation) {
+        unsigned int module_id = 1, oe_id = 1;
+
+        /*
+         * Provide the metadata needed for a FIPS validation.
+         */
+        rv = acvp_oe_ingest_metadata(ctx, cfg.validation_metadata_file);
+        if (rv != ACVP_SUCCESS) {
+            printf("Failed to read validation_metadata_file\n");
+            goto end;
+        }
+
+        /*
+         * Tell the library which Module and Operating Environment to use
+         * when doing the FIPS validation.
+         */
+        rv = acvp_oe_set_fips_validation_metadata(ctx, module_id, oe_id);
+        if (rv != ACVP_SUCCESS) {
+            printf("Failed to set metadata for FIPS validation\n");
+            goto end;
+        }
     }
 
     /*
-     * Now we process the test cases given to us during
-     * registration earlier.
+     * Run the test session.
+     * Perform a FIPS validation on this test session if specified.
      */
-    rv = acvp_process_tests(ctx);
-    if (rv != ACVP_SUCCESS) {
-        printf("Failed to process vectors (%d)\n", rv);
-        goto end;
-    }
-
-    printf("\nTests complete, checking results...\n");
-    rv = acvp_check_test_results(ctx);
-    if (rv != ACVP_SUCCESS) {
-        printf("Unable to retrieve test results (%d)\n", rv);
-        goto end;
-    }
+    acvp_run(ctx, cfg.fips_validation);
 
 end:
     /*

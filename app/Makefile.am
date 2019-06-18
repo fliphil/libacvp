@@ -4,7 +4,8 @@ acvp_app_SOURCES = app_main.c \
 				   app_aes.c \
 				   app_cli.c \
 				   app_utils.c \
-				   app_lcl.h
+				   app_lcl.h \
+				   ketopt.h
 acvp_app_CFLAGS = -g -fPIE -I$(top_srcdir)/include $(SSL_CFLAGS) $(FOM_CFLAGS) $(SAFEC_CFLAGS)
 acvp_app_LDFLAGS = -L../src/.libs -ldl -lacvp $(SSL_LDFLAGS) $(FOM_LDFLAGS)
 if USE_FOM

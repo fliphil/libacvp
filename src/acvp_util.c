@@ -1,28 +1,13 @@
-/*****************************************************************************
-* Copyright (c) 2016-2017, Cisco Systems, Inc.
-* All rights reserved.
+/** @file */
+/*
+ * Copyright (c) 2019, Cisco Systems, Inc.
+ *
+ * Licensed under the Apache License 2.0 (the "License").  You may not use
+ * this file except in compliance with the License.  You can obtain a copy
+ * in the file LICENSE in the source distribution or at
+ * https://github.com/cisco/libacvp/LICENSE
+ */
 
-* Redistribution and use in source and binary forms, with or without modification,
-* are permitted provided that the following conditions are met:
-*
-* 1. Redistributions of source code must retain the above copyright notice,
-*    this list of conditions and the following disclaimer.
-*
-* 2. Redistributions in binary form must reproduce the above copyright notice,
-*    this list of conditions and the following disclaimer in the documentation
-*    and/or other materials provided with the distribution.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
-* USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*****************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -89,9 +74,9 @@ ACVP_RESULT acvp_cleanup(ACVP_CTX *ctx) {
             ACVP_LOG_ERR("Failed to free parameter 'ctx'");
         }
     }
-
+#ifndef ACVP_OFFLINE
     curl_global_cleanup();
-
+#endif
     return rv;
 }
 
@@ -132,6 +117,30 @@ char *acvp_lookup_cipher_name(ACVP_CIPHER alg) {
             return alg_tbl[i].name;
         }
     }
+    return NULL;
+}
+
+/*
+ * @brief This function returns the revision of an algorithm given
+ *        a ACVP_CIPHER value.
+ *
+ * If the mode is given, then it will also use that to
+ * narrow down the search to entries that only match
+ * both the \p alg and \p mode.
+ *
+ * @return String representing the Revision
+ * @return NULL no match
+ *
+ */
+const char *acvp_lookup_cipher_revision(ACVP_CIPHER alg) {
+    int i = 0;
+
+    for (i = 0; i < ACVP_ALG_MAX; i++) {
+        if (alg_tbl[i].cipher == alg) {
+            return alg_tbl[i].revision;
+        }
+    }
+
     return NULL;
 }
 
@@ -764,7 +773,51 @@ void ctr128_inc(unsigned char *counter) {
     } while (n);
 }
 
-void acvp_free_kv_list(ACVP_KV_LIST *kv_list) {
+#define ACVP_UTIL_KV_STR_MAX 256
+
+ACVP_RESULT acvp_kv_list_append(ACVP_KV_LIST **kv_list,
+                                const char *key,
+                                const char *value) {
+    ACVP_KV_LIST *kv = NULL;
+
+    if (kv_list == NULL || key == NULL || value == NULL) {
+        return ACVP_INVALID_ARG;
+    }
+    if (!string_fits(key, ACVP_UTIL_KV_STR_MAX)) {
+        return ACVP_INVALID_ARG;
+    }
+    if (!string_fits(value, ACVP_UTIL_KV_STR_MAX)) {
+        return ACVP_INVALID_ARG;
+    }
+
+    if (*kv_list == NULL) {
+        *kv_list = calloc(1, sizeof(ACVP_KV_LIST));
+        if (*kv_list == NULL) return ACVP_MALLOC_FAIL;
+        kv = *kv_list;
+    } else {
+        ACVP_KV_LIST *current = *kv_list;
+        while (current->next) {
+            current = current->next;
+        }
+
+        // Append the next entry
+        current->next = calloc(1, sizeof(ACVP_KV_LIST));
+        if (current->next == NULL) return ACVP_MALLOC_FAIL;
+        kv = current->next;
+    }
+
+    kv->key = calloc(ACVP_UTIL_KV_STR_MAX + 1, sizeof(char));
+    if (kv->key == NULL) return ACVP_MALLOC_FAIL;
+    kv->value = calloc(ACVP_UTIL_KV_STR_MAX + 1, sizeof(char));
+    if (kv->value == NULL) return ACVP_MALLOC_FAIL;
+
+    strcpy_s(kv->key, ACVP_UTIL_KV_STR_MAX + 1, key);
+    strcpy_s(kv->value, ACVP_UTIL_KV_STR_MAX + 1, value);
+
+    return ACVP_SUCCESS;
+}
+
+void acvp_kv_list_free(ACVP_KV_LIST *kv_list) {
     ACVP_KV_LIST *tmp;
 
     while (kv_list) {
@@ -800,10 +853,146 @@ ACVP_RESULT acvp_setup_json_rsp_group(ACVP_CTX **ctx,
     return ACVP_SUCCESS;
 }
 
+static char *acvp_get_version_from_rsp(JSON_Value *arry_val) {
+    char *version = NULL;
+    JSON_Object *ver_obj = NULL;
+
+    JSON_Array *reg_array;
+
+    reg_array = json_value_get_array(arry_val);
+    ver_obj = json_array_get_object(reg_array, 0);
+    version = (char *)json_object_get_string(ver_obj, "acvVersion");
+    if (version == NULL) {
+        return NULL;
+    }
+
+    return version;
+}
+
+JSON_Object *acvp_get_obj_from_rsp(ACVP_CTX *ctx, JSON_Value *arry_val) {
+    JSON_Object *obj = NULL;
+    JSON_Array *reg_array;
+    char *ver = NULL;
+
+    reg_array = json_value_get_array(arry_val);
+    ver = acvp_get_version_from_rsp(arry_val);
+    if (ver == NULL) {
+        return NULL;
+    }
+    ACVP_LOG_INFO("ACV version: %s", ver);
+
+    obj = json_array_get_object(reg_array, 1);
+    return obj;
+}
+
 void acvp_release_json(JSON_Value *r_vs_val,
                        JSON_Value *r_gval) {
 
     if (r_gval) json_value_free(r_gval);
     if (r_vs_val) json_value_free(r_vs_val);
+}
+
+/**
+ * @brief Determine if the given \p string fits within the \p max_allowed length.
+ *
+ * Measure the length of the \p string to see whether it's length
+ * (not including terminator) is <= \p max_allowed.
+ *
+ * @return 1 Length of \string <= \p max_allowed
+ * @return 0 Length of \string > \p max_allowed
+ * 
+ */
+int string_fits(const char *string, unsigned int max_allowed) {
+    if (strnlen_s(string, max_allowed + 1) > max_allowed) {
+        return 0;
+    }
+
+    return 1;
+}
+
+/*
+ * Simple utility function to free a string
+ * list.
+ */
+void acvp_free_str_list(ACVP_STRING_LIST **list) {
+    ACVP_STRING_LIST *top = NULL;
+    ACVP_STRING_LIST *tmp = NULL;;
+
+    if (list == NULL) return;
+    top = *list;
+    if (top == NULL) return;
+
+    while (top) {
+        if (top->string) free(top->string);
+        tmp = top;
+        top = top->next;
+        free(tmp);
+    }
+
+    *list = NULL;
+}
+
+ACVP_RESULT acvp_json_serialize_to_file_pretty_a(const JSON_Value *value, const char *filename) {
+    ACVP_RESULT return_code = ACVP_SUCCESS;
+    FILE *fp = NULL;
+    char *serialized_string = NULL; 
+
+    fp = fopen(filename, "a");
+    if (fp == NULL) {
+        return ACVP_JSON_ERR;
+    }
+    if (!value) {
+        if (fputs(" ]", fp) == EOF) {
+            return_code = ACVP_JSON_ERR;
+        }
+    } else {
+
+        serialized_string = json_serialize_to_string_pretty(value, NULL);
+        if (serialized_string == NULL) {
+            fclose(fp);
+            return ACVP_JSON_ERR;
+        }
+        if (fputs(", ", fp) == EOF) {
+            return_code = ACVP_JSON_ERR;
+            goto end;
+        }
+        if (fputs(serialized_string, fp) == EOF) {
+            return_code = ACVP_JSON_ERR;
+        }
+    }
+end:
+    if (fclose(fp) == EOF) {
+        return_code = ACVP_JSON_ERR;
+    }
+    json_free_serialized_string(serialized_string);
+    return return_code;
+}
+
+ACVP_RESULT acvp_json_serialize_to_file_pretty_w(const JSON_Value *value, const char *filename) {
+    ACVP_RESULT return_code = ACVP_SUCCESS;
+    FILE *fp = NULL;
+    char *serialized_string = json_serialize_to_string_pretty(value, NULL);
+    if (serialized_string == NULL) {
+        return ACVP_JSON_ERR;
+    }
+    fp = fopen(filename, "w");
+    if (fp == NULL) {
+        json_free_serialized_string(serialized_string);
+        return ACVP_JSON_ERR;
+    }
+    if (fputs("[ ", fp) == EOF) {
+        return_code = ACVP_JSON_ERR;
+        goto end;
+    }
+    if (fputs(serialized_string, fp) == EOF) {
+        json_free_serialized_string(serialized_string);
+        return_code = ACVP_JSON_ERR;
+    }
+end:
+    if (fclose(fp) == EOF) {
+        return_code = ACVP_JSON_ERR;
+    }
+    json_free_serialized_string(serialized_string);
+    return return_code;
 }
 

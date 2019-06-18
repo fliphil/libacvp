@@ -3,6 +3,7 @@ AM_CFLAGS = -I$(top_srcdir)/include/acvp $(SAFEC_CFLAGS) $(LIBCURL_CFLAGS)
 libacvp_la_SOURCES =  acvp.c \
                     acvp_build_register.c \
                     acvp_capabilities.c \
+                    acvp_operating_env.c \
                     acvp_aes.c \
                     acvp_des.c \
                     acvp_hash.c \
@@ -29,6 +30,7 @@ libacvp_la_SOURCES =  acvp.c \
 
 libacvp_la_LIBADD = $(SAFEC_LDFLAGS) $(LIBCURL_LDFLAGS)
 libacvp_includedir=$(includedir)/acvp
-libacvp_include_HEADERS = $(top_srcdir)/include/acvp/acvp.h \
-						  $(top_srcdir)/include/acvp/parson.h
-noinst_HEADERS = $(top_srcdir)/include/acvp/acvp_lcl.h
+libacvp_include_HEADERS = $(top_srcdir)/include/acvp/acvp.h
+noinst_HEADERS = $(top_srcdir)/include/acvp/acvp_lcl.h \
+				 $(top_srcdir)/include/acvp/parson.h
+

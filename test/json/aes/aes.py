@@ -1,28 +1,10 @@
 """
+* Copyright (c) 2019, Cisco Systems, Inc.
 *
-* Copyright (c) 2018, Cisco Systems, Inc.
-* All rights reserved.
-*
-* Redistribution and use in source and binary forms, with or without modification,
-* are permitted provided that the following conditions are met:
-*
-* 1. Redistributions of source code must retain the above copyright notice,
-*    this list of conditions and the following disclaimer.
-*
-* 2. Redistributions in binary form must reproduce the above copyright notice,
-*    this list of conditions and the following disclaimer in the documentation
-*    and/or other materials provided with the distribution.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
-* USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+* Licensed under the Apache License 2.0 (the "License").  You may not use
+* this file except in compliance with the License.  You can obtain a copy
+* in the file LICENSE in the source distribution or at
+* https://github.com/cisco/libacvp/LICENSE
 *
 """
 import os
@@ -134,11 +116,11 @@ def ref_testgroup_and_test(j_list, group_type=ENCRYPT):
 
 
 def convert_to_gcm(s):
-    if s[1]["algorithm"] == "AES-GCM":
+    if s[1]["algorithm"] == "ACVP-AES-GCM":
         # Already GCM mode
         return
 
-    s[1]["algorithm"] = "AES-GCM"
+    s[1]["algorithm"] = "ACVP-AES-GCM"
 
     tg, t = ref_testgroup_and_test(s, ENCRYPT)
     tg["ivGen"] = "internal"
@@ -162,11 +144,11 @@ def convert_to_gcm(s):
 
 
 def convert_to_ctr(s):
-    if s[1]["algorithm"] == "AES-CTR":
+    if s[1]["algorithm"] == "ACVP-AES-CTR":
         # Already CTR mode
         return
 
-    s[1]["algorithm"] = "AES-CTR"
+    s[1]["algorithm"] = "ACVP-AES-CTR"
 
     tg, t = ref_testgroup_and_test(s, ENCRYPT)
     tg["incrementalCounter"] = True
@@ -174,11 +156,11 @@ def convert_to_ctr(s):
 
 
 def convert_to_ccm(s):
-    if s[1]["algorithm"] == "AES-CCM":
+    if s[1]["algorithm"] == "ACVP-AES-CCM":
         # Already CCM mode
         return
 
-    s[1]["algorithm"] = "AES-CCM"
+    s[1]["algorithm"] = "ACVP-AES-CCM"
 
     tg, t = ref_testgroup_and_test(s, ENCRYPT)
     tg["ivLen"] = 56
@@ -541,7 +523,7 @@ def gen(j=None):
         json.dump(s, fp, indent=2)
 
     ##
-    # The boolean for "incrementalCounter" is not a boolean for AES-CTR
+    # The boolean for "incrementalCounter" is not a boolean for ACVP-AES-CTR
     ##
     s = copy.deepcopy(j)
     convert_to_ctr(s)
@@ -553,7 +535,7 @@ def gen(j=None):
         json.dump(s, fp, indent=2)
 
     ##
-    # The boolean for "overflowCounter" is not a boolean for AES-CTR
+    # The boolean for "overflowCounter" is not a boolean for ACVP-AES-CTR
     ##
     s = copy.deepcopy(j)
     convert_to_ctr(s)

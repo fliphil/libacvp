@@ -1,29 +1,13 @@
 /** @file */
-/*****************************************************************************
-* Copyright (c) 2016-2017, Cisco Systems, Inc.
-* All rights reserved.
+/*
+ * Copyright (c) 2019, Cisco Systems, Inc.
+ *
+ * Licensed under the Apache License 2.0 (the "License").  You may not use
+ * this file except in compliance with the License.  You can obtain a copy
+ * in the file LICENSE in the source distribution or at
+ * https://github.com/cisco/libacvp/LICENSE
+ */
 
-* Redistribution and use in source and binary forms, with or without modification,
-* are permitted provided that the following conditions are met:
-*
-* 1. Redistributions of source code must retain the above copyright notice,
-*    this list of conditions and the following disclaimer.
-*
-* 2. Redistributions in binary form must reproduce the above copyright notice,
-*    this list of conditions and the following disclaimer in the documentation
-*    and/or other materials provided with the distribution.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
-* USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*****************************************************************************/
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -216,11 +200,11 @@ static ACVP_RESULT acvp_rsa_sig_kat_handler_internal(ACVP_CTX *ctx, JSON_Object 
 
     ACVP_CIPHER alg_id;
     char *json_result = NULL, *mode_str;
-    unsigned int mod = 0;
-    char *msg, *signature = NULL;
+    unsigned int mod = 0, padding = 0;
+    char *msg, *signature = NULL, *tmp_signature = NULL;
     char *e_str = NULL, *n_str = NULL;
     char *salt = NULL, *alg_str;
-    int salt_len = 0, json_msglen, json_siglen;
+    int salt_len = 0, json_msglen, json_siglen, p;
     ACVP_RESULT rv;
 
     if (!ctx) {
@@ -415,26 +399,47 @@ static ACVP_RESULT acvp_rsa_sig_kat_handler_internal(ACVP_CTX *ctx, JSON_Object 
 
 
             if (alg_id == ACVP_RSA_SIGVER) {
-                signature = (char *)json_object_get_string(testobj, "signature");
-                if (!signature) {
+                tmp_signature = (char *)json_object_get_string(testobj, "signature");
+                if (!tmp_signature) {
                     ACVP_LOG_ERR("Missing 'signature' from server json");
                     rv = ACVP_MISSING_ARG;
                     json_value_free(r_tval);
                     goto err;
                 }
-                json_siglen = strnlen_s(signature, ACVP_RSA_SIGNATURE_MAX + 1);
+                json_siglen = strnlen_s(tmp_signature, ACVP_RSA_SIGNATURE_MAX + 1);
                 if (json_siglen > ACVP_RSA_SIGNATURE_MAX) {
                     ACVP_LOG_ERR("'signature' too long in server json");
                     rv = ACVP_INVALID_ARG;
                     json_value_free(r_tval);
                     goto err;
                 }
+
+                if (json_siglen != mod/4) {
+                    signature = calloc(mod/4 +1, sizeof(char));                    
+                    if (!signature) {
+                        ACVP_LOG_ERR("Unable to malloc for signature");
+                        rv = ACVP_MALLOC_FAIL;
+                        goto err;
+                    }
+                    padding = mod/4 - json_siglen;
+                    for (p=0;p<padding;p++) {
+                        signature[p] = 0x30;
+                    }
+                    memcpy_s(signature + padding, mod/4, tmp_signature, json_siglen);
+                } else {
+                    padding = 0;
+                    signature = tmp_signature;
+                }
+
                 salt = (char *)json_object_get_string(testobj, "salt");
             }
 
             rv = acvp_rsa_sig_init_tc(ctx, alg_id, &stc, tgId, tc_id,
                                       sig_type, mod, hash_alg, e_str,
                                       n_str, msg, signature, salt, salt_len);
+            if (padding) {
+                free(signature);
+            }
 
             /* Process the current test vector... */
             if (rv == ACVP_SUCCESS) {
